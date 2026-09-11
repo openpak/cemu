@@ -9,7 +9,8 @@ enum class NetworkService
 	Nintendo,
 	Pretendo,
 	Custom,
-	COUNT = Custom
+	OpenPak,
+	COUNT = OpenPak
 };
 
 struct NetworkConfig
@@ -71,6 +72,19 @@ struct PretendoURLs {
    inline static std::string OLVURL = "https://discovery.olv.pretendo.cc/v1/endpoint";
 };
 
+struct OpenPakURLs {
+   inline static std::string ACTURL =  "https://account.openpak.org";
+   inline static std::string ECSURL = "https://ecs.wup.shop.openpak.org/ecs/services/ECommerceSOAP";
+   inline static std::string NUSURL = "https://nus.wup.shop.openpak.org/nus/services/NetUpdateSOAP";
+   inline static std::string IASURL = "https://ias.wup.shop.openpak.org/ias/services/IdentityAuthenticationSOAP";
+   inline static std::string CCSUURL = "https://ccs.wup.shop.openpak.org/ccs/download";
+   inline static std::string CCSURL = "http://ccs.cdn.wup.shop.openpak.org/ccs/download";
+   inline static std::string IDBEURL = "https://idbe-wup.cdn.openpak.org/icondata";
+   inline static std::string BOSSURL = "https://npts.app.openpak.org/p01/tasksheet";
+   inline static std::string TAGAYAURL = "https://tagaya.wup.shop.openpak.org/tagaya/versionlist";
+   inline static std::string OLVURL = "https://discovery.olv.openpak.org/v1/endpoint";
+};
+
 typedef XMLDataConfig<NetworkConfig> XMLNetworkConfig_t;
 extern XMLNetworkConfig_t n_config;
 inline NetworkConfig& GetNetworkConfig() { return n_config.data();};
@@ -81,6 +95,9 @@ inline bool IsNetworkServiceSSLDisabled(NetworkService service)
 		return false;
 	else if(service == NetworkService::Pretendo)
 		return true;
+	else if(service == NetworkService::OpenPak)
+		return true; // leafs are signed by the OpenPak CA, which the host store does not hold
+
 	else if(service == NetworkService::Custom)
 		return GetNetworkConfig().disablesslver.GetValue();
 	return false;

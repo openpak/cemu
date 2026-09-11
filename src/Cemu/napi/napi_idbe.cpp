@@ -63,6 +63,9 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			requestUrl = PretendoURLs::IDBEURL;
 			break;
+		case NetworkService::OpenPak:
+			requestUrl = OpenPakURLs::IDBEURL;
+			break;
 		case NetworkService::Custom:
 			requestUrl = GetNetworkConfig().urls.IDBE.GetValue();
 			break;

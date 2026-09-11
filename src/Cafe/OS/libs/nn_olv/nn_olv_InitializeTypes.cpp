@@ -184,6 +184,9 @@ namespace nn
 				case NetworkService::Pretendo:
 					requestUrl = PretendoURLs::OLVURL;
 					break;
+				case NetworkService::OpenPak:
+					requestUrl = OpenPakURLs::OLVURL;
+					break;
 				case NetworkService::Custom:
 					requestUrl = GetNetworkConfig().urls.OLV.GetValue();
 					break;
@@ -310,4 +313,4 @@ namespace nn
 			return g_IsInitialized;
 		}
 	}
-}
+}
