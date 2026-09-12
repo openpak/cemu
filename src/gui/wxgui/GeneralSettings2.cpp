@@ -17,6 +17,7 @@
 
 #include "config/CemuConfig.h"
 #include "config/NetworkSettings.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 
 #include "audio/IAudioAPI.h"
 #if BOOST_OS_WINDOWS
@@ -914,6 +915,18 @@ wxPanel* GeneralSettings2::AddAccountPage(wxNotebook* notebook)
 
 		m_active_service->Bind(wxEVT_RADIOBOX, &GeneralSettings2::OnAccountServiceChanged,this);
 		online_panel_sizer->Add(m_active_service, 0, wxEXPAND | wxALL, 5);
+
+		// OpenPak: the applied network profile, with the refresh action (EP-5). A launch
+		// fetches once; this picks up a new title without a restart.
+		auto* profile_row = new wxBoxSizer(wxHORIZONTAL);
+		m_openpak_profile_refresh = new wxButton(online_panel, wxID_ANY, _("Refresh network settings"));
+		m_openpak_profile_refresh->SetToolTip(_("Re-fetch OpenPak's network profile (where its services live). Games do this once per launch."));
+		m_openpak_profile_refresh->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakProfileRefresh, this);
+		profile_row->Add(m_openpak_profile_refresh, 0, wxALL, 5);
+		m_openpak_profile_status = new wxStaticText(online_panel, wxID_ANY, wxEmptyString);
+		profile_row->Add(m_openpak_profile_status, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+		online_panel_sizer->Add(profile_row, 0, wxEXPAND);
+		UpdateOpenPakProfileStatus();
 
 		if (CafeSystem::IsTitleRunning())
 		{
@@ -2366,6 +2379,34 @@ void GeneralSettings2::OnAccountServiceChanged(wxCommandEvent& event)
 	uint32 peristentId = GetSelectedAccountPersistentId();
 	config.SetAccountSelectedService(peristentId, static_cast<NetworkService>(m_active_service->GetSelection()));
 	UpdateAccountInformation();
+}
+
+// OpenPak: the "Refresh network settings" action (prds/emulator-network-profile-prd.md §2.4).
+// A launch fetches the profile once; this picks up a new title or a moved service without a
+// restart. It re-runs the same conditional GET — it never blocks longer than two seconds and
+// never leaves the applied URLs in a half-swapped state.
+void GeneralSettings2::OnOpenPakProfileRefresh(wxCommandEvent& event)
+{
+	m_openpak_profile_refresh->Enable(false);
+	m_openpak_profile_status->SetLabel(_("Refreshing..."));
+
+	// The fetch is synchronous and bounded by its two-second timeout; the settings dialog is
+	// modal to this action by design, because applying a profile mid-request is worse than
+	// waiting two seconds for it.
+	OpenPakNetworkProfile::Refresh();
+	UpdateOpenPakProfileStatus();
+	m_openpak_profile_refresh->Enable(true);
+}
+
+void GeneralSettings2::UpdateOpenPakProfileStatus()
+{
+	if (!m_openpak_profile_status)
+		return;
+	const int version = OpenPakNetworkProfile::GetVersion();
+	if (version >= 0)
+		m_openpak_profile_status->SetLabel(wxString::Format(_("Network profile: %s (v%d)"), OpenPakNetworkProfile::GetSource(), version));
+	else
+		m_openpak_profile_status->SetLabel(_("Network profile: built-in defaults"));
 }
 
 void GeneralSettings2::OnMLCPathSelect(wxCommandEvent& event)

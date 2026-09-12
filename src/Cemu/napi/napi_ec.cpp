@@ -1,5 +1,6 @@
 #include "Common/precompiled.h"
 #include "napi.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 #include "napi_helper.h"
 
 #include "curl/curl.h"
@@ -45,7 +46,7 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			return PretendoURLs::NUSURL;
 		case NetworkService::OpenPak:
-			return OpenPakURLs::NUSURL;
+			return OpenPakNetworkProfile::ServiceURL("nus");
 		case NetworkService::Custom:
 			return GetNetworkConfig().urls.NUS;
 		default:
@@ -65,7 +66,7 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			return PretendoURLs::IASURL;
 		case NetworkService::OpenPak:
-			return OpenPakURLs::IASURL;
+			return OpenPakNetworkProfile::ServiceURL("ias");
 		case NetworkService::Custom:
 			return GetNetworkConfig().urls.IAS;
 		default:
@@ -86,7 +87,7 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			return PretendoURLs::ECSURL;
 		case NetworkService::OpenPak:
-			return OpenPakURLs::ECSURL;
+			return OpenPakNetworkProfile::ServiceURL("ecs");
 		case NetworkService::Custom:
 			return GetNetworkConfig().urls.ECS;
 		default:
@@ -106,7 +107,7 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			return PretendoURLs::CCSUURL;
 		case NetworkService::OpenPak:
-			return OpenPakURLs::CCSUURL;
+			return OpenPakNetworkProfile::ServiceURL("ccsu");
 		case NetworkService::Custom:
 			return GetNetworkConfig().urls.CCSU;
 		default:
@@ -126,7 +127,7 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			return PretendoURLs::CCSURL;
 		case NetworkService::OpenPak:
-			return OpenPakURLs::CCSURL;
+			return OpenPakNetworkProfile::ServiceURL("ccs");
 		case NetworkService::Custom:
 			return GetNetworkConfig().urls.CCS;
 		default:

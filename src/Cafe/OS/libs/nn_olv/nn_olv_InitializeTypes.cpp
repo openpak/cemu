@@ -1,6 +1,7 @@
 #include "nn_olv_InitializeTypes.h"
 #include "CafeSystem.h"
 #include "Cafe/OS/libs/nn_act/nn_act.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 #include <time.h>
 
 namespace nn
@@ -185,7 +186,7 @@ namespace nn
 					requestUrl = PretendoURLs::OLVURL;
 					break;
 				case NetworkService::OpenPak:
-					requestUrl = OpenPakURLs::OLVURL;
+					requestUrl = OpenPakNetworkProfile::ServiceURL("olv");
 					break;
 				case NetworkService::Custom:
 					requestUrl = GetNetworkConfig().urls.OLV.GetValue();

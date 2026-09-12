@@ -8,6 +8,7 @@
 #include "Cemu/ncrypto/ncrypto.h"
 #include <charconv>
 #include "config/ActiveSettings.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 #include "config/NetworkSettings.h"
 
 namespace NAPI
@@ -24,7 +25,7 @@ namespace NAPI
 			requestUrl = PretendoURLs::TAGAYAURL;
 			break;
 		case NetworkService::OpenPak:
-			requestUrl = OpenPakURLs::TAGAYAURL;
+			requestUrl = OpenPakNetworkProfile::ServiceURL("tagaya");
 			break;
 		case NetworkService::Custom:
 			requestUrl = GetNetworkConfig().urls.TAGAYA.GetValue();

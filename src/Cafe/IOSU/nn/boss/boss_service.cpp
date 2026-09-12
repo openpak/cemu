@@ -20,6 +20,7 @@
 
 #include "Cemu/ncrypto/ncrypto.h"
 #include "Cemu/napi/napi_helper.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 #include "IOSU/legacy/iosu_crypto.h"
 #include "util/crypto/aes128.h"
 
@@ -396,7 +397,7 @@ namespace iosu::boss
 					requestUrl = PretendoURLs::BOSSURL;
 					break;
 				case NetworkService::OpenPak:
-					requestUrl = OpenPakURLs::BOSSURL;
+					requestUrl = OpenPakNetworkProfile::ServiceURL("boss");
 					break;
 				case NetworkService::Custom:
 					requestUrl = GetNetworkConfig().urls.BOSS.GetValue();

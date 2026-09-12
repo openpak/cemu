@@ -12,6 +12,7 @@
 #include "util/helpers/StringHelpers.h"
 #include "config/ActiveSettings.h"
 #include "config/NetworkSettings.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 
 namespace NAPI
 {
@@ -64,7 +65,7 @@ namespace NAPI
 			requestUrl = PretendoURLs::IDBEURL;
 			break;
 		case NetworkService::OpenPak:
-			requestUrl = OpenPakURLs::IDBEURL;
+			requestUrl = OpenPakNetworkProfile::ServiceURL("idbe");
 			break;
 		case NetworkService::Custom:
 			requestUrl = GetNetworkConfig().urls.IDBE.GetValue();

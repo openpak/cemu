@@ -4,6 +4,7 @@
 #include <wx/propgrid/propgrid.h>
 #include <Cafe/Account/Account.h>
 
+class wxButton;
 class wxCheckBox;
 class wxChoice;
 class wxColourPickerCtrl;
@@ -93,6 +94,9 @@ private:
 	wxButton* m_create_account, * m_delete_account;
 	wxChoice* m_active_account;
 	wxRadioBox* m_active_service;
+	// OpenPak: the applied network profile and its refresh action (EP-5)
+	wxButton* m_openpak_profile_refresh = nullptr;
+	wxStaticText* m_openpak_profile_status = nullptr;
 	wxCollapsiblePane* m_account_information;
 	wxPropertyGrid* m_account_grid;
 	wxBitmapButton* m_validate_online;
@@ -126,6 +130,8 @@ private:
 	void OnMLCPathClear(wxCommandEvent& event);
 	void OnShowOnlineValidator(wxCommandEvent& event);
 	void OnAccountServiceChanged(wxCommandEvent& event);
+	void OnOpenPakProfileRefresh(wxCommandEvent& event);
+	void UpdateOpenPakProfileStatus();
 	static wxString GetOnlineAccountErrorMessage(OnlineAccountError error);
 
 	uint32 GetSelectedAccountPersistentId();

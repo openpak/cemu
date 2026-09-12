@@ -2,6 +2,7 @@
 #include "Cafe/Account/Account.h"
 #include "Cemu/ncrypto/ncrypto.h"
 #include "napi.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 #include "napi_helper.h"
 #include "curl/curl.h"
 #include "config/ActiveSettings.h"
@@ -19,7 +20,7 @@ namespace NAPI
 		case NetworkService::Pretendo:
 			return PretendoURLs::ACTURL;
 		case NetworkService::OpenPak:
-			return OpenPakURLs::ACTURL;
+			return OpenPakNetworkProfile::ServiceURL("act");
 		case NetworkService::Custom:
 			return GetNetworkConfig().urls.ACT.GetValue();
 		default:

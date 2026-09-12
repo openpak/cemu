@@ -14,6 +14,7 @@
 #include "input/api/SDL/SDLControllerProvider.h"
 #include "wxgui/helpers/wxHelpers.h"
 #include "Cemu/ncrypto/ncrypto.h"
+#include "Cemu/OpenPak/NetworkProfile.h"
 #include "wxgui/input/HotkeySettings.h"
 #include "wxgui/debugger/DebuggerWindow2.h"
 #include <wx/language.h>
@@ -279,6 +280,9 @@ bool CemuApp::OnInit()
 	bool isFirstStart = !fs::exists(ActiveSettings::GetConfigPath("settings.xml"), ec);
 
 	NetworkConfig::LoadOnce();
+	// OpenPak: one conditional GET for the network profile (prds/emulator-network-profile-prd.md
+	// §2). Two seconds, best-effort: the compiled-in service URLs apply until a profile lands.
+	OpenPakNetworkProfile::ApplyAtLaunch();
 	if (!isFirstStart)
 	{
 		GetConfigHandle().Load();
