@@ -1,6 +1,8 @@
 #include "iosu_crypto.h"
 
 #include "config/ActiveSettings.h"
+#include "config/NetworkSettings.h"
+#include "Cemu/OpenPak/DeviceIdentity.h"
 #include "openssl/bn.h"
 #include "openssl/obj_mac.h"
 #include "openssl/ec.h"
@@ -552,6 +554,10 @@ void iosuCrypto_loadSSLCertificates()
 
 void iosuCrypto_init()
 {
+	// OpenPak: the OpenPak service does not need console dumps — synthesise
+	// the device identity when the dumps are absent and this service is
+	// selected (NA-1a OTP-less path). Existing files are never touched.
+	OpenPakDeviceIdentity::EnsureFiles();
 	// load OTP dump
 	if (std::ifstream otp_file(ActiveSettings::GetUserDataPath("otp.bin"), std::ifstream::in | std::ios::binary); otp_file.is_open())
 	{
@@ -631,7 +637,12 @@ sint32 iosuCrypt_checkRequirementsForOnlineMode(std::string& additionalErrorInfo
 		return IOS_CRYPTO_ONLINE_REQ_SEEPROM_MISSING;
 	if (fs::file_size(seeprom_file, ec) != 512)
 		return IOS_CRYPTO_ONLINE_REQ_SEEPROM_CORRUPTED;
-	
+
+	// OpenPak: TLS verification is off for this service, so the MLC SSL
+	// certificate store is never consulted and stays optional.
+	if (ActiveSettings::GetNetworkService() == NetworkService::OpenPak)
+		return IOS_CRYPTO_ONLINE_REQ_OK;
+
 	for (const auto& c : g_certificates)
 	{
 		std::string subPath = fmt::format("sys/title/0005001b/10054000/content/{}", boost::nowide::narrow(c.name));

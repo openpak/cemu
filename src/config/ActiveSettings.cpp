@@ -1,5 +1,6 @@
 #include "Cafe/GameProfile/GameProfile.h"
 #include "Cafe/IOSU/legacy/iosu_crypto.h"
+#include "Cemu/OpenPak/DeviceIdentity.h"
 #include "Cafe/HW/Latte/Core/Latte.h"
 #ifdef ENABLE_VULKAN
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h"
@@ -50,6 +51,9 @@ void ActiveSettings::SetPaths(bool isPortableMode,
 void ActiveSettings::Init()
 {
 	cemu_assert_debug(s_setPathsCalled);
+	// OpenPak: synthesise the device identity before the online-files check so
+	// the OpenPak service is playable without console dumps from the first run.
+	OpenPakDeviceIdentity::EnsureFiles();
 	std::string additionalErrorInfo;
 	s_has_required_online_files = iosuCrypt_checkRequirementsForOnlineMode(additionalErrorInfo) == IOS_CRYPTO_ONLINE_REQ_OK;
 }

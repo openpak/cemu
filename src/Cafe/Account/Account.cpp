@@ -3,6 +3,8 @@
 #include "util/helpers/helpers.h"
 #include "util/helpers/StringHelpers.h"
 #include "config/ActiveSettings.h"
+#include "config/CemuConfig.h"
+#include "config/NetworkSettings.h"
 #include "Cafe/IOSU/legacy/iosu_crypto.h"
 #include "Common/FileStream.h"
 #include <boost/random/uniform_int.hpp>
@@ -439,18 +441,25 @@ OnlineValidator Account::ValidateOnlineFiles() const
 	else
 		result.seeprom = OnlineValidator::FileState::Ok;
 
-	for(const auto& v : iosuCrypt_getCertificateKeys())
+	// OpenPak: TLS verification is off for this service, so the MLC SSL
+	// certificate store is never consulted and stays optional.
+	const bool certStoreOptional =
+		GetConfig().GetAccountNetworkService(m_persistent_id) == NetworkService::OpenPak;
+	if (!certStoreOptional)
 	{
-		const auto p = ActiveSettings::GetMlcPath(L"sys/title/0005001b/10054000/content/{}", v);
-		if (!fs::exists(p) || !fs::is_regular_file(p))
-			result.missing_files.emplace_back(p.generic_wstring());
-	}
+		for(const auto& v : iosuCrypt_getCertificateKeys())
+		{
+			const auto p = ActiveSettings::GetMlcPath(L"sys/title/0005001b/10054000/content/{}", v);
+			if (!fs::exists(p) || !fs::is_regular_file(p))
+				result.missing_files.emplace_back(p.generic_wstring());
+		}
 
-	for (const auto& v : iosuCrypt_getCertificateNames())
-	{
-		const auto p = ActiveSettings::GetMlcPath(L"sys/title/0005001b/10054000/content/{}", v);
-		if (!fs::exists(p) || !fs::is_regular_file(p))
-			result.missing_files.emplace_back(p.generic_wstring());
+		for (const auto& v : iosuCrypt_getCertificateNames())
+		{
+			const auto p = ActiveSettings::GetMlcPath(L"sys/title/0005001b/10054000/content/{}", v);
+			if (!fs::exists(p) || !fs::is_regular_file(p))
+				result.missing_files.emplace_back(p.generic_wstring());
+		}
 	}
 
 	result.valid_account = IsValidOnlineAccount();

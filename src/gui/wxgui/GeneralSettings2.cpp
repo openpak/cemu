@@ -18,6 +18,8 @@
 #include "config/CemuConfig.h"
 #include "config/NetworkSettings.h"
 #include "Cemu/OpenPak/NetworkProfile.h"
+#include "Cemu/OpenPak/Account.h"
+#include "Cemu/Logging/CemuLogging.h"
 
 #include "audio/IAudioAPI.h"
 #if BOOST_OS_WINDOWS
@@ -932,6 +934,47 @@ wxPanel* GeneralSettings2::AddAccountPage(wxNotebook* notebook)
 		{
 			m_active_service->Enable(false);
 		}
+	}
+
+	// OpenPak: the account session (prds/emulator-integration-prd.md E3). Sign-in mints
+	// the console identity server-side and installs it as an account.dat — no console
+	// dump needed on this service.
+	{
+		auto* box = new wxStaticBox(online_panel, wxID_ANY, _("OpenPak account"));
+		auto* box_sizer = new wxStaticBoxSizer(box, wxVERTICAL);
+
+		auto* row = new wxFlexGridSizer(0, 2, 0, 0);
+		row->SetFlexibleDirection(wxBOTH);
+		row->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
+		row->AddGrowableCol(1, 1);
+		row->Add(new wxStaticText(box, wxID_ANY, _("Email")), 0, wxALL | wxALIGN_CENTRE_VERTICAL, 5);
+		m_openpak_email = new wxTextCtrl(box, wxID_ANY);
+		row->Add(m_openpak_email, 1, wxEXPAND | wxALL, 5);
+		row->Add(new wxStaticText(box, wxID_ANY, _("Password")), 0, wxALL | wxALIGN_CENTRE_VERTICAL, 5);
+		m_openpak_password = new wxTextCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
+		m_openpak_password->SetToolTip(_("Your openpak.org password. It is sent only to openpak.org."));
+		row->Add(m_openpak_password, 1, wxEXPAND | wxALL, 5);
+		box_sizer->Add(row, 0, wxEXPAND, 5);
+
+		auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
+		m_openpak_sign_in = new wxButton(box, wxID_ANY, _("Sign in"));
+		m_openpak_sign_in->SetToolTip(_("Sign in to OpenPak and install this account's Wii U identity as a console account."));
+		m_openpak_sign_in->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakSignIn, this);
+		btn_row->Add(m_openpak_sign_in, 0, wxALL, 5);
+		m_openpak_apply = new wxButton(box, wxID_ANY, _("Apply identity"));
+		m_openpak_apply->SetToolTip(_("Re-write the stored OpenPak identity into the emulated console."));
+		m_openpak_apply->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakApply, this);
+		btn_row->Add(m_openpak_apply, 0, wxALL, 5);
+		m_openpak_sign_out = new wxButton(box, wxID_ANY, _("Sign out"));
+		m_openpak_sign_out->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakSignOut, this);
+		btn_row->Add(m_openpak_sign_out, 0, wxALL, 5);
+		box_sizer->Add(btn_row, 0, wxEXPAND, 5);
+
+		m_openpak_account_status = new wxStaticText(box, wxID_ANY, wxEmptyString);
+		box_sizer->Add(m_openpak_account_status, 0, wxALL, 5);
+
+		online_panel_sizer->Add(box_sizer, 0, wxEXPAND | wxALL, 5);
+		UpdateOpenPakAccountStatus();
 	}
 
 	{
@@ -2407,6 +2450,103 @@ void GeneralSettings2::UpdateOpenPakProfileStatus()
 		m_openpak_profile_status->SetLabel(wxString::Format(_("Network profile: %s (v%d)"), OpenPakNetworkProfile::GetSource(), version));
 	else
 		m_openpak_profile_status->SetLabel(_("Network profile: built-in defaults"));
+}
+
+// OpenPak: the account session (E3). The sign-in request blocks, so it runs on a
+// worker thread and reports back through CallAfter.
+void GeneralSettings2::OnOpenPakSignIn(wxCommandEvent& event)
+{
+	const wxString email = m_openpak_email->GetValue().Trim().Trim(false);
+	const wxString password = m_openpak_password->GetValue();
+	if (email.empty() || password.empty())
+	{
+		m_openpak_account_status->SetLabel(_("Enter your openpak.org email and password."));
+		return;
+	}
+	m_openpak_sign_in->Enable(false);
+	m_openpak_account_status->SetLabel(_("Signing in..."));
+
+	std::thread([this, email, password]() {
+		const OpenPakAccount::SignInResult result =
+			OpenPakAccount::SignIn(email.ToStdString(), password.ToStdString());
+		CallAfter(&GeneralSettings2::OnOpenPakSignInFinished, wxString(result.error));
+	}).detach();
+}
+
+void GeneralSettings2::OnOpenPakSignInFinished(const wxString& error)
+{
+	m_openpak_sign_in->Enable(true);
+	if (error.empty())
+	{
+		// A new console account appeared and was selected; refresh everything.
+		RefreshAccountListAfterOpenPakApply();
+	}
+	else
+	{
+		m_openpak_account_status->SetLabel(error);
+	}
+	UpdateOpenPakAccountStatus();
+}
+
+void GeneralSettings2::OnOpenPakSignOut(wxCommandEvent& event)
+{
+	OpenPakAccount::SignOut();
+	UpdateOpenPakAccountStatus();
+}
+
+void GeneralSettings2::OnOpenPakApply(wxCommandEvent& event)
+{
+	const std::string error = OpenPakAccount::ApplyIdentity();
+	if (error.empty())
+		RefreshAccountListAfterOpenPakApply();
+	UpdateOpenPakAccountStatus(error);
+}
+
+void GeneralSettings2::RefreshAccountListAfterOpenPakApply()
+{
+	Account::RefreshAccounts();
+	UpdateOnlineAccounts();
+	// UpdateOnlineAccounts selects the first row; make the configured account the shown one.
+	const uint32 selected = GetConfig().account.m_persistent_id;
+	for (unsigned int i = 0; i < m_active_account->GetCount(); ++i)
+	{
+		if (dynamic_cast<wxAccountData*>(m_active_account->GetClientObject(i)) != nullptr &&
+			dynamic_cast<wxAccountData*>(m_active_account->GetClientObject(i))->GetAccount().GetPersistentId() == selected)
+		{
+			m_active_account->SetSelection(i);
+			UpdateAccountInformation();
+			break;
+		}
+	}
+	if (GetParent())
+	{
+		wxCommandEvent refresh_event(wxEVT_ACCOUNTLIST_REFRESH);
+		GetParent()->ProcessWindowEvent(refresh_event);
+	}
+}
+
+void GeneralSettings2::UpdateOpenPakAccountStatus(const wxString& applyError)
+{
+	if (!m_openpak_account_status)
+		return;
+	if (!OpenPakAccount::IsSignedIn())
+	{
+		m_openpak_account_status->SetLabel(
+			_("Not signed in. Sign in to play online on OpenPak with this emulator."));
+		m_openpak_apply->Enable(false);
+		m_openpak_sign_out->Enable(false);
+		m_openpak_email->Enable(true);
+		m_openpak_password->Enable(true);
+		return;
+	}
+	m_openpak_apply->Enable(true);
+	m_openpak_sign_out->Enable(true);
+	m_openpak_email->Enable(false);
+	m_openpak_password->Enable(false);
+	wxString status = wxString::Format(_("Signed in as %s."), OpenPakAccount::GetUsername());
+	if (!applyError.empty())
+		status += " " + applyError;
+	m_openpak_account_status->SetLabel(status);
 }
 
 void GeneralSettings2::OnMLCPathSelect(wxCommandEvent& event)

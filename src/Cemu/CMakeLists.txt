@@ -9,11 +9,15 @@ add_library(CemuComponents
   napi/napi_act.cpp
   napi/napi_ec.cpp
   napi/napi.cpp
+  OpenPak/Account.cpp
+  OpenPak/Account.h
+  OpenPak/DeviceIdentity.cpp
+  OpenPak/DeviceIdentity.h
   OpenPak/NetworkProfile.cpp
   OpenPak/NetworkProfile.h
   napi/napi.h
-  napi/napi.helper.cpp
-  napi/napi.helper.h
+  napi/napi_helper.cpp
+  napi/napi_helper.h
   napi/napi_idbe.cpp
   napi/napi_version.cpp
   ncrypto/ncrypto.cpp

@@ -97,6 +97,13 @@ private:
 	// OpenPak: the applied network profile and its refresh action (EP-5)
 	wxButton* m_openpak_profile_refresh = nullptr;
 	wxStaticText* m_openpak_profile_status = nullptr;
+	// OpenPak: the account session (E3)
+	wxTextCtrl* m_openpak_email = nullptr;
+	wxTextCtrl* m_openpak_password = nullptr;
+	wxButton* m_openpak_sign_in = nullptr;
+	wxButton* m_openpak_sign_out = nullptr;
+	wxButton* m_openpak_apply = nullptr;
+	wxStaticText* m_openpak_account_status = nullptr;
 	wxCollapsiblePane* m_account_information;
 	wxPropertyGrid* m_account_grid;
 	wxBitmapButton* m_validate_online;
@@ -132,6 +139,12 @@ private:
 	void OnAccountServiceChanged(wxCommandEvent& event);
 	void OnOpenPakProfileRefresh(wxCommandEvent& event);
 	void UpdateOpenPakProfileStatus();
+	void OnOpenPakSignIn(wxCommandEvent& event);
+	void OnOpenPakSignInFinished(const wxString& error);
+	void OnOpenPakSignOut(wxCommandEvent& event);
+	void OnOpenPakApply(wxCommandEvent& event);
+	void UpdateOpenPakAccountStatus(const wxString& applyError = {});
+	void RefreshAccountListAfterOpenPakApply();
 	static wxString GetOnlineAccountErrorMessage(OnlineAccountError error);
 
 	uint32 GetSelectedAccountPersistentId();
