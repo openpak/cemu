@@ -7,6 +7,7 @@
 #include <wx/notebook.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
+#include <wx/textctrl.h>
 
 #include <chrono>
 
@@ -33,6 +34,15 @@ OpenPakFriendsWindow::OpenPakFriendsWindow(wxWindow* parent)
 	m_friendsList->Bind(wxEVT_LIST_ITEM_SELECTED, &OpenPakFriendsWindow::OnSelectionChanged, this);
 	m_friendsList->Bind(wxEVT_LIST_ITEM_DESELECTED, &OpenPakFriendsWindow::OnSelectionChanged, this);
 	friendsSizer->Add(m_friendsList, 1, wxEXPAND | wxALL, 5);
+	auto* friendsButtons = new wxBoxSizer(wxHORIZONTAL);
+	m_addCode = new wxTextCtrl(friendsPanel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	m_addCode->SetToolTip(_("A friend code from any OpenPak console (e.g. SW-1234-5678-9012)."));
+	m_addCode->Bind(wxEVT_TEXT_ENTER, &OpenPakFriendsWindow::OnSendRequest, this);
+	friendsButtons->Add(m_addCode, 1, wxEXPAND | wxALL, 5);
+	m_addButton = new wxButton(friendsPanel, wxID_ANY, _("Add friend"));
+	m_addButton->Bind(wxEVT_BUTTON, &OpenPakFriendsWindow::OnSendRequest, this);
+	friendsButtons->Add(m_addButton, 0, wxALL, 5);
+	friendsSizer->Add(friendsButtons, 0, wxEXPAND);
 	m_removeButton = new wxButton(friendsPanel, wxID_ANY, _("Remove friend"));
 	m_removeButton->Bind(wxEVT_BUTTON, &OpenPakFriendsWindow::OnRemoveFriend, this);
 	friendsSizer->Add(m_removeButton, 0, wxALIGN_RIGHT | wxALL, 5);
@@ -272,6 +282,30 @@ void OpenPakFriendsWindow::OnDeclineRequest(wxCommandEvent& event)
 		const std::string error = OpenPakSocial::DeclineFriend(account_id);
 		CallAfter([this, error]() {
 			if (!error.empty())
+				m_status->SetLabel(wxString::FromUTF8(error));
+			RefreshAsync();
+		});
+	}).detach();
+}
+
+void OpenPakFriendsWindow::OnSendRequest(wxCommandEvent& event)
+{
+	const std::string code = m_addCode->GetValue().ToStdString();
+	if (code.empty())
+		return;
+	m_addButton->Enable(false);
+	m_addCode->Enable(false);
+	std::thread([this, code]() {
+		const std::string error = OpenPakSocial::SendFriendRequest(code);
+		CallAfter([this, error]() {
+			m_addButton->Enable(true);
+			m_addCode->Enable(true);
+			if (error.empty())
+			{
+				m_addCode->Clear();
+				m_status->SetLabel(_("Friend request sent."));
+			}
+			else
 				m_status->SetLabel(wxString::FromUTF8(error));
 			RefreshAsync();
 		});

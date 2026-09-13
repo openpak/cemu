@@ -27,6 +27,7 @@ class OpenPakFriendsWindow : public wxDialog
 	void OnAcceptRequest(wxCommandEvent& event);
 	void OnDeclineRequest(wxCommandEvent& event);
 	void OnRemoveFriend(wxCommandEvent& event);
+	void OnSendRequest(wxCommandEvent& event);
 	void OnSelectionChanged(wxListEvent& event);
 	void OnClose(wxCloseEvent& event);
 
@@ -45,6 +46,8 @@ class OpenPakFriendsWindow : public wxDialog
 	wxButton* m_acceptButton = nullptr;
 	wxButton* m_declineButton = nullptr;
 	wxButton* m_removeButton = nullptr;
+	wxTextCtrl* m_addCode = nullptr;
+	wxButton* m_addButton = nullptr;
 	wxTimer m_refreshTimer;
 
 	// row order mirrors these; the lists show display names, actions key on account ids

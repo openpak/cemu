@@ -38,7 +38,7 @@ namespace OpenPakSocial
 	struct Invitation
 	{
 		std::string invitation_id;
-		std::string from;    // display name of the sender
+		std::string from;       // display name of the sender
 		std::string title_id;
 		std::string expires_at; // RFC3339
 	};
@@ -57,4 +57,7 @@ namespace OpenPakSocial
 	std::string AcceptFriend(const std::string& account_id);
 	std::string DeclineFriend(const std::string& account_id);
 	std::string RemoveFriend(const std::string& account_id);
+	// Sends a request to the account behind a friend code (the website resolves
+	// codes across consoles; codes are minted per console family).
+	std::string SendFriendRequest(const std::string& friend_code);
 }

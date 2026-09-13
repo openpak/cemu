@@ -270,4 +270,18 @@ namespace OpenPakSocial
 			return ErrorFrom(resp.body, resp.status);
 		return {};
 	}
+
+	std::string SendFriendRequest(const std::string& friend_code)
+	{
+		std::string bearer, error;
+		if (!GetBearerOr(bearer, error))
+			return error;
+		const auto resp = Request("POST", ApiBase() + "/api/v1/me/friends/requests",
+			fmt::format("{{\"friend_code\":\"{}\"}}", friend_code), bearer);
+		if (!resp.error.empty())
+			return "could not reach openpak.org: " + resp.error;
+		if (resp.status != 200 && resp.status != 201)
+			return ErrorFrom(resp.body, resp.status);
+		return {};
+	}
 } // namespace OpenPakSocial
