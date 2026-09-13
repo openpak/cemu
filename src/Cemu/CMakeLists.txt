@@ -15,6 +15,8 @@ add_library(CemuComponents
   OpenPak/DeviceIdentity.h
   OpenPak/NetworkProfile.cpp
   OpenPak/NetworkProfile.h
+  OpenPak/Social.cpp
+  OpenPak/Social.h
   napi/napi.h
   napi/napi_helper.cpp
   napi/napi_helper.h

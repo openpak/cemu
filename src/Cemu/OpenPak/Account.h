@@ -34,6 +34,10 @@ namespace OpenPakAccount
 	bool IsSignedIn();
 	std::string GetUsername(); // the NNID / display name, empty when signed out
 
+	// The website bearer for the OpenPak surfaces that speak to openpak.org
+	// (Social). Empty when signed out.
+	std::string GetBearer();
+
 	// Writes the stored identity into the emulated console. Returns an error
 	// message, or empty on success. Called by SignIn and by the settings UI
 	// ("apply again" after a failed or partial apply).

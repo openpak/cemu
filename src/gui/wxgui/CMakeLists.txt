@@ -92,6 +92,8 @@ add_library(CemuWxGui STATIC
   LoggingWindow.h
   MainWindow.cpp
   MainWindow.h
+  OpenPakFriendsWindow.cpp
+  OpenPakFriendsWindow.h
   MemorySearcherTool.cpp
   MemorySearcherTool.h
   PadViewFrame.cpp

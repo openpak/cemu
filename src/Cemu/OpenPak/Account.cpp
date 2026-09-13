@@ -381,6 +381,13 @@ namespace OpenPakAccount
 		return g_username;
 	}
 
+	std::string GetBearer()
+	{
+		EnsureLoaded();
+		std::lock_guard lock(g_mutex);
+		return g_bearer;
+	}
+
 	std::string ApplyIdentity()
 	{
 		EnsureLoaded();
