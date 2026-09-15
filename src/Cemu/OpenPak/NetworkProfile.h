@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-// OpenPak: the applied network profile (prds/emulator-network-profile-prd.md §4b).
+// OpenPak: the applied network profile (emulators/prds/emulator-network-profile-prd.md §4b).
 //
 // Cemu addresses service URLs rather than resolving names, so this consumes the profile's
 // services[] and nothing else from redirect.*. One conditional GET per launch, two-second

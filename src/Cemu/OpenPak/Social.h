@@ -5,7 +5,7 @@
 #include <vector>
 
 // OpenPak: the social surfaces the website serves for every console at once
-// (prds/emulator-integration-prd.md §3.5): one friend graph — the same list
+// (emulators/prds/emulator-integration-prd.md §3.5): one friend graph — the same list
 // the phone and the website show — plus its requests and the invitation
 // inbox. In-game friends, notifications and invitations ride NEX (nn-friends)
 // and land in this same graph, so what this module shows is what the games see.

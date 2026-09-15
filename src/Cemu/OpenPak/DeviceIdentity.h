@@ -1,7 +1,7 @@
 #pragma once
 
 // OpenPak: the OTP-less path for the OpenPak network service (PRD
-// emulator-integration-prd.md NA-1a). A real Wii U derives its device
+// emulators/prds/emulator-integration-prd.md NA-1a). A real Wii U derives its device
 // identity — device id, serial, device certificate and its key — from the
 // console's otp.bin and seeprom.bin, which only console owners can dump.
 // The OpenPak adapter does not verify certificate chains (structural checks

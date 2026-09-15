@@ -70,7 +70,7 @@ std::string ToLower(std::string s)
 	return s;
 }
 
-// The compiled-in ceiling (prds/emulator-network-profile-prd.md §3): the domain families Cemu
+// The compiled-in ceiling (emulators/prds/emulator-network-profile-prd.md §3): the domain families Cemu
 // will ever address. The profile chooses within it; anything outside rejects the whole
 // profile. A name sits inside a family on a label boundary, so "a.nintendo.net" is in and
 // "evila.nintendo.net.evil.example" is not.

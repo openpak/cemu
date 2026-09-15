@@ -936,7 +936,7 @@ wxPanel* GeneralSettings2::AddAccountPage(wxNotebook* notebook)
 		}
 	}
 
-	// OpenPak: the account session (prds/emulator-integration-prd.md E3). Sign-in mints
+	// OpenPak: the account session (emulators/prds/emulator-integration-prd.md E3). Sign-in mints
 	// the console identity server-side and installs it as an account.dat — no console
 	// dump needed on this service.
 	{
@@ -2424,7 +2424,7 @@ void GeneralSettings2::OnAccountServiceChanged(wxCommandEvent& event)
 	UpdateAccountInformation();
 }
 
-// OpenPak: the "Refresh network settings" action (prds/emulator-network-profile-prd.md §2.4).
+// OpenPak: the "Refresh network settings" action (emulators/prds/emulator-network-profile-prd.md §2.4).
 // A launch fetches the profile once; this picks up a new title or a moved service without a
 // restart. It re-runs the same conditional GET — it never blocks longer than two seconds and
 // never leaves the applied URLs in a half-swapped state.

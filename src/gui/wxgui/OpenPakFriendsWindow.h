@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-// OpenPak: the friends window (prds/emulator-integration-prd.md §3.5). One
+// OpenPak: the friends window (emulators/prds/emulator-integration-prd.md §3.5). One
 // friend graph for every console: the list the phone and the website show,
 // with presence and the running title, the pending requests (in-game requests
 // land here through nn-friends), and the invitation inbox.

@@ -280,7 +280,7 @@ bool CemuApp::OnInit()
 	bool isFirstStart = !fs::exists(ActiveSettings::GetConfigPath("settings.xml"), ec);
 
 	NetworkConfig::LoadOnce();
-	// OpenPak: one conditional GET for the network profile (prds/emulator-network-profile-prd.md
+	// OpenPak: one conditional GET for the network profile (emulators/prds/emulator-network-profile-prd.md
 	// §2). Two seconds, best-effort: the compiled-in service URLs apply until a profile lands.
 	OpenPakNetworkProfile::ApplyAtLaunch();
 	if (!isFirstStart)
