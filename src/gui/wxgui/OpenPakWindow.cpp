@@ -864,7 +864,8 @@ class NewsPage : public OpenPakPage
 			return;
 		m_built = true;
 		ClearBody();
-		AddNotHere(_("Wii U news lives in Miiverse, on the network."), _("Open Miiverse"), OpenPakUI::WebsiteUrl() + "/miiverse");
+		// No link: OpenPak serves Miiverse to consoles only; there is no web Miiverse to open.
+		AddNotHere(_("Wii U news lives in Miiverse, on the network."));
 		FinishBody();
 	}
 

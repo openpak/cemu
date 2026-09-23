@@ -50,7 +50,7 @@ apply, so a game starts either way.
   - *Mods*: the catalogue's mods for a Wii U title (local titles and the catalogue; the running
     game by default), with Favourite. **Installing graphic packs from OpenPak is not in this
     build** (M-1); the page says so.
-  - *News*: Wii U news lives in Miiverse — a not-here panel with *Open Miiverse*.
+  - *News*: Wii U news lives in Miiverse — a not-here panel, without a link (there is no web Miiverse).
   - *Status*: the status page's verdict and services, players online per title and network,
     and this session (account, console link, console edge, presence, a Ping test).
 - **Sign-in** (`src/gui/wxgui/OpenPakUI.cpp`): Email, Password and a Device name (default
