@@ -1,18 +1,7 @@
 name: Generate translation template
 
 on:
-  pull_request:
-    paths-ignore:
-      - "*.md"
-    types:
-      - opened
-      - synchronize
-      - reopened
-  push:
-    paths-ignore:
-      - "*.md"
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   generate-pot:

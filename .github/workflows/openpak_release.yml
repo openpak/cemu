@@ -1,10 +1,10 @@
 name: OpenPak release
 
-# Tag openpak-v1.2.3: builds Cemu for Linux, Windows and macOS with upstream's own build
+# Tag v1.2.3: builds Cemu for Linux, Windows and macOS with upstream's own build
 # workflow and attaches the artifacts to a GitHub Release.
 on:
   push:
-    tags: ['openpak-v*']
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
           mkdir -p upload
           for d in artifacts/*/; do n=$(basename "$d"); (cd "$d" && zip -qr "../../upload/${n}-${GITHUB_REF_NAME}.zip" .); done
           ls -la upload
-      - if: startsWith(github.ref, 'refs/tags/openpak-v')
+      - if: startsWith(github.ref, 'refs/tags/v')
         run: gh release create "${GITHUB_REF_NAME}" upload/* --repo "${GITHUB_REPOSITORY}" --title "Cemu ${GITHUB_REF_NAME} (OpenPak)" --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

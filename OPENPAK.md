@@ -3,7 +3,7 @@
 Fork of upstream Cemu with one addition: a way to point the emulated console at OpenPak —
 including signing in to an OpenPak account, which mints and installs the console identity so
 online works with no console dump. Everything else is upstream, merged as it moves. Builds:
-`openpak-v*` tags publish a GitHub Release (`.github/workflows/openpak_release.yml`).
+`vX.Y.Z` tags (`v*.*.*`) publish a GitHub Release (`.github/workflows/openpak_release.yml`).
 
 A **Network Service** choice called **OpenPak** next to Nintendo, Pretendo and Custom
 (Options → General settings → Account). It points every Wii U service URL (account, eShop
