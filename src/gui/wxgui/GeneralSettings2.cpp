@@ -19,6 +19,10 @@
 #include "config/NetworkSettings.h"
 #include "Cemu/OpenPak/NetworkProfile.h"
 #include "Cemu/OpenPak/Account.h"
+#include "Cemu/OpenPak/Prefs.h"
+#include "wxgui/OpenPakUI.h"
+#include "wxgui/OpenPakWindow.h"
+#include <wx/weakref.h>
 #include "Cemu/Logging/CemuLogging.h"
 
 #include "audio/IAudioAPI.h"
@@ -918,63 +922,10 @@ wxPanel* GeneralSettings2::AddAccountPage(wxNotebook* notebook)
 		m_active_service->Bind(wxEVT_RADIOBOX, &GeneralSettings2::OnAccountServiceChanged,this);
 		online_panel_sizer->Add(m_active_service, 0, wxEXPAND | wxALL, 5);
 
-		// OpenPak: the applied network profile, with the refresh action (EP-5). A launch
-		// fetches once; this picks up a new title without a restart.
-		auto* profile_row = new wxBoxSizer(wxHORIZONTAL);
-		m_openpak_profile_refresh = new wxButton(online_panel, wxID_ANY, _("Refresh network settings"));
-		m_openpak_profile_refresh->SetToolTip(_("Re-fetch OpenPak's network profile (where its services live). Games do this once per launch."));
-		m_openpak_profile_refresh->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakProfileRefresh, this);
-		profile_row->Add(m_openpak_profile_refresh, 0, wxALL, 5);
-		m_openpak_profile_status = new wxStaticText(online_panel, wxID_ANY, wxEmptyString);
-		profile_row->Add(m_openpak_profile_status, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-		online_panel_sizer->Add(profile_row, 0, wxEXPAND);
-		UpdateOpenPakProfileStatus();
-
 		if (CafeSystem::IsTitleRunning())
 		{
 			m_active_service->Enable(false);
 		}
-	}
-
-	// OpenPak: the account session (emulators/prds/emulator-integration-prd.md E3). Sign-in mints
-	// the console identity server-side and installs it as an account.dat — no console
-	// dump needed on this service.
-	{
-		auto* box = new wxStaticBox(online_panel, wxID_ANY, _("OpenPak account"));
-		auto* box_sizer = new wxStaticBoxSizer(box, wxVERTICAL);
-
-		auto* row = new wxFlexGridSizer(0, 2, 0, 0);
-		row->SetFlexibleDirection(wxBOTH);
-		row->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
-		row->AddGrowableCol(1, 1);
-		row->Add(new wxStaticText(box, wxID_ANY, _("Email")), 0, wxALL | wxALIGN_CENTRE_VERTICAL, 5);
-		m_openpak_email = new wxTextCtrl(box, wxID_ANY);
-		row->Add(m_openpak_email, 1, wxEXPAND | wxALL, 5);
-		row->Add(new wxStaticText(box, wxID_ANY, _("Password")), 0, wxALL | wxALIGN_CENTRE_VERTICAL, 5);
-		m_openpak_password = new wxTextCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
-		m_openpak_password->SetToolTip(_("Your openpak.org password. It is sent only to openpak.org."));
-		row->Add(m_openpak_password, 1, wxEXPAND | wxALL, 5);
-		box_sizer->Add(row, 0, wxEXPAND, 5);
-
-		auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
-		m_openpak_sign_in = new wxButton(box, wxID_ANY, _("Sign in"));
-		m_openpak_sign_in->SetToolTip(_("Sign in to OpenPak and install this account's Wii U identity as a console account."));
-		m_openpak_sign_in->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakSignIn, this);
-		btn_row->Add(m_openpak_sign_in, 0, wxALL, 5);
-		m_openpak_apply = new wxButton(box, wxID_ANY, _("Apply identity"));
-		m_openpak_apply->SetToolTip(_("Re-write the stored OpenPak identity into the emulated console."));
-		m_openpak_apply->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakApply, this);
-		btn_row->Add(m_openpak_apply, 0, wxALL, 5);
-		m_openpak_sign_out = new wxButton(box, wxID_ANY, _("Sign out"));
-		m_openpak_sign_out->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakSignOut, this);
-		btn_row->Add(m_openpak_sign_out, 0, wxALL, 5);
-		box_sizer->Add(btn_row, 0, wxEXPAND, 5);
-
-		m_openpak_account_status = new wxStaticText(box, wxID_ANY, wxEmptyString);
-		box_sizer->Add(m_openpak_account_status, 0, wxALL, 5);
-
-		online_panel_sizer->Add(box_sizer, 0, wxEXPAND | wxALL, 5);
-		UpdateOpenPakAccountStatus();
 	}
 
 	{
@@ -1128,7 +1079,7 @@ wxPanel* GeneralSettings2::AddDebugPage(wxNotebook* notebook)
 	return panel;
 }
 
-GeneralSettings2::GeneralSettings2(wxWindow* parent, bool game_launched)
+GeneralSettings2::GeneralSettings2(wxWindow* parent, bool game_launched, bool openpakTab)
 	: wxDialog(parent, wxID_ANY, _("General settings"), wxDefaultPosition, wxDefaultSize, wxCLOSE_BOX | wxCLIP_CHILDREN | wxCAPTION | wxRESIZE_BORDER), m_game_launched(game_launched)
 {
 	SetIcon(wxICON(X_SETTINGS));
@@ -1141,6 +1092,8 @@ GeneralSettings2::GeneralSettings2(wxWindow* parent, bool game_launched)
 	notebook->AddPage(AddAudioPage(notebook), _("Audio"));
 	notebook->AddPage(AddOverlayPage(notebook), _("Overlay"));
 	notebook->AddPage(AddAccountPage(notebook), _("Account"));
+	notebook->AddPage(AddOpenPakPage(notebook), _("OpenPak"));
+	const size_t openpakPage = notebook->GetPageCount() - 1;
 	notebook->AddPage(AddDebugPage(notebook), _("Debug"));
 
 	Bind(wxEVT_CLOSE_WINDOW, &GeneralSettings2::OnClose, this);
@@ -1162,6 +1115,16 @@ GeneralSettings2::GeneralSettings2(wxWindow* parent, bool game_launched)
 	HandleGraphicsApiSelection();
 
 	DisableSettings(game_launched);
+
+	UpdateOpenPakTab();
+	if (openpakTab)
+		notebook->SetSelection(openpakPage);
+	// Sign-in and sign-out elsewhere (the OpenPak window opened from here) redraw this tab and
+	// the account list.
+	m_openpak_listener = OpenPakUI::AddAccountListener([this]() {
+		RefreshAccountListAfterOpenPakApply();
+		UpdateOpenPakTab();
+	});
 }
 
 uint32 GeneralSettings2::GetSelectedAccountPersistentId()
@@ -1349,6 +1312,14 @@ void GeneralSettings2::StoreConfig()
 	// account
 	config.account.m_persistent_id = GetSelectedAccountPersistentId();
 
+	// OpenPak (the other OpenPak switches are saved as they change)
+	if (m_openpak_website)
+	{
+		const std::string website = m_openpak_website->GetValue().Strip(wxString::both).utf8_string();
+		if (website != OpenPakPrefs::Website())
+			OpenPakPrefs::SetWebsite(website.empty() ? "https://openpak.org" : website);
+	}
+
 	// debug
 	config.crash_dump = (CrashDump)m_crash_dump->GetSelection();
 	config.gdb_port = m_gdb_port->GetValue();
@@ -1362,6 +1333,7 @@ void GeneralSettings2::StoreConfig()
 
 GeneralSettings2::~GeneralSettings2()
 {
+	OpenPakUI::RemoveAccountListener(m_openpak_listener);
 	Unbind(wxEVT_CLOSE_WINDOW, &GeneralSettings2::OnClose, this);
 }
 
@@ -2414,6 +2386,7 @@ void GeneralSettings2::OnActiveAccountChanged(wxCommandEvent& event)
 {
 	UpdateAccountInformation();
 	m_has_account_change = true;
+	UpdateOpenPakTab();
 }
 
 void GeneralSettings2::OnAccountServiceChanged(wxCommandEvent& event)
@@ -2422,23 +2395,161 @@ void GeneralSettings2::OnAccountServiceChanged(wxCommandEvent& event)
 	uint32 peristentId = GetSelectedAccountPersistentId();
 	config.SetAccountSelectedService(peristentId, static_cast<NetworkService>(m_active_service->GetSelection()));
 	UpdateAccountInformation();
+	UpdateOpenPakTab();
+}
+
+// OpenPak: the OpenPak tab (emulators/prds/openpak-ux-spec.md §3.13): the connection switch,
+// mirrored with the Network Service radio on the Account tab; the account row; the window; cloud
+// sync; notifications; and, collapsed, the website and the network-profile refresh.
+wxPanel* GeneralSettings2::AddOpenPakPage(wxNotebook* notebook)
+{
+	auto* panel = new wxPanel(notebook);
+	auto* sizer = new wxBoxSizer(wxVERTICAL);
+	auto heading = [panel](const wxString& text) {
+		auto* label = new wxStaticText(panel, wxID_ANY, text);
+		label->SetFont(label->GetFont().Bold());
+		return label;
+	};
+
+	sizer->Add(heading(_("Account")), 0, wxALL, 5);
+	m_openpak_enable = new wxCheckBox(panel, wxID_ANY, _("Connect this emulator to OpenPak"));
+	m_openpak_enable->SetToolTip(_("When this is off the emulator behaves exactly as upstream does: offline, and nothing is sent anywhere."));
+	m_openpak_enable->Bind(wxEVT_CHECKBOX, &GeneralSettings2::OnOpenPakEnable, this);
+	sizer->Add(m_openpak_enable, 0, wxALL, 5);
+
+	auto* accountRow = new wxBoxSizer(wxHORIZONTAL);
+	m_openpak_account_status = new wxStaticText(panel, wxID_ANY, wxEmptyString);
+	accountRow->Add(m_openpak_account_status, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+	m_openpak_sign_in = new wxButton(panel, wxID_ANY, _("Sign in..."));
+	m_openpak_sign_in->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+		if (OpenPakAccount::IsSignedIn())
+			OpenPakUI::ConfirmAndSignOut(this);
+		else
+			OpenPakUI::SignIn(this);
+	});
+	accountRow->Add(m_openpak_sign_in, 0, wxALL, 5);
+	sizer->Add(accountRow, 0, wxEXPAND);
+
+	auto* open = new wxButton(panel, wxID_ANY, _("Open OpenPak..."));
+	open->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+		OpenPakWindow window(this, OpenPakUI::Page::Account);
+		window.ShowModal();
+	});
+	sizer->Add(open, 0, wxALL, 5);
+
+	m_openpak_cloud_sync = new wxCheckBox(panel, wxID_ANY, _("Sync cloud saves automatically when a game starts and stops"));
+	m_openpak_cloud_sync->SetValue(OpenPakPrefs::CloudSync());
+	m_openpak_cloud_sync->Bind(wxEVT_CHECKBOX, [](wxCommandEvent& e) { OpenPakPrefs::SetCloudSync(e.IsChecked()); });
+	sizer->Add(m_openpak_cloud_sync, 0, wxALL, 5);
+
+	sizer->AddSpacer(8);
+	sizer->Add(heading(_("Notifications")), 0, wxALL, 5);
+	auto* notifications = new wxCheckBox(panel, wxID_ANY, _("Show notifications"));
+	notifications->SetValue(OpenPakPrefs::Notifications());
+	notifications->Bind(wxEVT_CHECKBOX, [](wxCommandEvent& e) { OpenPakPrefs::SetNotifications(e.IsChecked()); });
+	sizer->Add(notifications, 0, wxALL, 5);
+	auto* cornerRow = new wxBoxSizer(wxHORIZONTAL);
+	cornerRow->Add(new wxStaticText(panel, wxID_ANY, _("Notification corner")), 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+	const wxString corners[] = {_("Bottom right"), _("Bottom left"), _("Top right"), _("Top left")};
+	auto* corner = new wxChoice(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, std::size(corners), corners);
+	corner->SetSelection((int)OpenPakPrefs::NotificationCorner());
+	corner->Bind(wxEVT_CHOICE, [](wxCommandEvent& e) { OpenPakPrefs::SetNotificationCorner((OpenPakPrefs::Corner)e.GetSelection()); });
+	cornerRow->Add(corner, 0, wxALL, 5);
+	sizer->Add(cornerRow, 0);
+
+	sizer->AddSpacer(8);
+	auto* advanced = new wxCollapsiblePane(panel, wxID_ANY, _("Advanced"));
+	advanced->Bind(wxEVT_COLLAPSIBLEPANE_CHANGED, [panel](wxCollapsiblePaneEvent&) { panel->Layout(); });
+	{
+		wxWindow* pane = advanced->GetPane();
+		auto* paneSizer = new wxBoxSizer(wxVERTICAL);
+		auto* websiteRow = new wxBoxSizer(wxHORIZONTAL);
+		websiteRow->Add(new wxStaticText(pane, wxID_ANY, _("Website")), 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+		m_openpak_website = new wxTextCtrl(pane, wxID_ANY, wxString::FromUTF8(OpenPakPrefs::Website()));
+		m_openpak_website->SetToolTip(_("Where the account lives and where you sign in. Leave this at openpak.org unless you run your own deployment."));
+		websiteRow->Add(m_openpak_website, 1, wxEXPAND | wxALL, 5);
+		paneSizer->Add(websiteRow, 0, wxEXPAND);
+		auto* profileRow = new wxBoxSizer(wxHORIZONTAL);
+		m_openpak_profile_refresh = new wxButton(pane, wxID_ANY, _("Refresh network settings"));
+		m_openpak_profile_refresh->Bind(wxEVT_BUTTON, &GeneralSettings2::OnOpenPakProfileRefresh, this);
+		profileRow->Add(m_openpak_profile_refresh, 0, wxALL, 5);
+		m_openpak_profile_status = new wxStaticText(pane, wxID_ANY, wxEmptyString);
+		profileRow->Add(m_openpak_profile_status, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+		paneSizer->Add(profileRow, 0, wxEXPAND);
+		pane->SetSizer(paneSizer);
+	}
+	sizer->Add(advanced, 0, wxEXPAND | wxALL, 5);
+	UpdateOpenPakProfileStatus();
+
+	panel->SetSizerAndFit(sizer);
+	return panel;
+}
+
+void GeneralSettings2::UpdateOpenPakTab()
+{
+	if (!m_openpak_enable)
+		return;
+	const bool running = CafeSystem::IsTitleRunning();
+	m_openpak_enable->SetValue(GetConfig().GetAccountNetworkService(GetSelectedAccountPersistentId()) == NetworkService::OpenPak);
+	m_openpak_enable->Enable(!running);
+	const bool signedIn = OpenPakAccount::IsSignedIn();
+	m_openpak_account_status->SetLabel(signedIn ? wxString::Format(_("Signed in as %s"), OpenPakUI::SignedInName()) : _("Not signed in"));
+	m_openpak_sign_in->SetLabel(signedIn ? _("Sign out...") : _("Sign in..."));
+	m_openpak_sign_in->Enable(!running);
+	m_openpak_sign_in->SetToolTip(running ? _("Stop the running game first.") : wxString());
+	m_openpak_account_status->GetParent()->Layout();
+}
+
+// The switch mirrors the Network Service radio of the account shown on the Account tab. On, it
+// selects the Mii account OpenPak signed in to (when there is one) and sets its service to
+// OpenPak; off, it sets the shown account's service to Offline.
+void GeneralSettings2::OnOpenPakEnable(wxCommandEvent& event)
+{
+	auto& config = GetConfig();
+	if (event.IsChecked())
+	{
+		const uint32 slot = OpenPakAccount::AppliedSlot();
+		if (slot != 0 && slot != GetSelectedAccountPersistentId())
+		{
+			for (unsigned int i = 0; i < m_active_account->GetCount(); ++i)
+			{
+				auto* data = dynamic_cast<wxAccountData*>(m_active_account->GetClientObject(i));
+				if (data && data->GetAccount().GetPersistentId() == slot)
+				{
+					m_active_account->SetSelection(i);
+					m_has_account_change = true;
+					break;
+				}
+			}
+		}
+		config.SetAccountSelectedService(GetSelectedAccountPersistentId(), NetworkService::OpenPak);
+	}
+	else
+	{
+		config.SetAccountSelectedService(GetSelectedAccountPersistentId(), NetworkService::Offline);
+	}
+	UpdateAccountInformation();
+	UpdateOpenPakTab();
 }
 
 // OpenPak: the "Refresh network settings" action (emulators/prds/emulator-network-profile-prd.md §2.4).
 // A launch fetches the profile once; this picks up a new title or a moved service without a
-// restart. It re-runs the same conditional GET — it never blocks longer than two seconds and
-// never leaves the applied URLs in a half-swapped state.
+// restart. The conditional GET runs on a worker thread (UX spec §5.2) and never leaves the
+// applied URLs half-swapped.
 void GeneralSettings2::OnOpenPakProfileRefresh(wxCommandEvent& event)
 {
 	m_openpak_profile_refresh->Enable(false);
-	m_openpak_profile_status->SetLabel(_("Refreshing..."));
-
-	// The fetch is synchronous and bounded by its two-second timeout; the settings dialog is
-	// modal to this action by design, because applying a profile mid-request is worse than
-	// waiting two seconds for it.
-	OpenPakNetworkProfile::Refresh();
-	UpdateOpenPakProfileStatus();
-	m_openpak_profile_refresh->Enable(true);
+	m_openpak_profile_status->SetLabel(wxString::Format(_("Network settings: %s."), _("Checking...")));
+	wxWeakRef<GeneralSettings2> self(this);
+	std::thread([self]() {
+		OpenPakNetworkProfile::Refresh();
+		wxTheApp->CallAfter([self]() {
+			if (!self)
+				return;
+			self->UpdateOpenPakProfileStatus();
+			self->m_openpak_profile_refresh->Enable(true);
+		});
+	}).detach();
 }
 
 void GeneralSettings2::UpdateOpenPakProfileStatus()
@@ -2446,60 +2557,10 @@ void GeneralSettings2::UpdateOpenPakProfileStatus()
 	if (!m_openpak_profile_status)
 		return;
 	const int version = OpenPakNetworkProfile::GetVersion();
-	if (version >= 0)
-		m_openpak_profile_status->SetLabel(wxString::Format(_("Network profile: %s (v%d)"), OpenPakNetworkProfile::GetSource(), version));
-	else
-		m_openpak_profile_status->SetLabel(_("Network profile: built-in defaults"));
-}
-
-// OpenPak: the account session (E3). The sign-in request blocks, so it runs on a
-// worker thread and reports back through CallAfter.
-void GeneralSettings2::OnOpenPakSignIn(wxCommandEvent& event)
-{
-	const wxString email = m_openpak_email->GetValue().Trim().Trim(false);
-	const wxString password = m_openpak_password->GetValue();
-	if (email.empty() || password.empty())
-	{
-		m_openpak_account_status->SetLabel(_("Enter your openpak.org email and password."));
-		return;
-	}
-	m_openpak_sign_in->Enable(false);
-	m_openpak_account_status->SetLabel(_("Signing in..."));
-
-	std::thread([this, email, password]() {
-		const OpenPakAccount::SignInResult result =
-			OpenPakAccount::SignIn(email.ToStdString(), password.ToStdString());
-		CallAfter(&GeneralSettings2::OnOpenPakSignInFinished, wxString(result.error));
-	}).detach();
-}
-
-void GeneralSettings2::OnOpenPakSignInFinished(const wxString& error)
-{
-	m_openpak_sign_in->Enable(true);
-	if (error.empty())
-	{
-		// A new console account appeared and was selected; refresh everything.
-		RefreshAccountListAfterOpenPakApply();
-	}
-	else
-	{
-		m_openpak_account_status->SetLabel(error);
-	}
-	UpdateOpenPakAccountStatus();
-}
-
-void GeneralSettings2::OnOpenPakSignOut(wxCommandEvent& event)
-{
-	OpenPakAccount::SignOut();
-	UpdateOpenPakAccountStatus();
-}
-
-void GeneralSettings2::OnOpenPakApply(wxCommandEvent& event)
-{
-	const std::string error = OpenPakAccount::ApplyIdentity();
-	if (error.empty())
-		RefreshAccountListAfterOpenPakApply();
-	UpdateOpenPakAccountStatus(error);
+	const wxString what = version >= 0
+		? wxString::Format("%s, v%d", wxString::FromUTF8(OpenPakNetworkProfile::GetSource()), version)
+		: wxString::FromUTF8(OpenPakNetworkProfile::GetSource());
+	m_openpak_profile_status->SetLabel(wxString::Format(_("Network settings: %s."), what));
 }
 
 void GeneralSettings2::RefreshAccountListAfterOpenPakApply()
@@ -2523,30 +2584,6 @@ void GeneralSettings2::RefreshAccountListAfterOpenPakApply()
 		wxCommandEvent refresh_event(wxEVT_ACCOUNTLIST_REFRESH);
 		GetParent()->ProcessWindowEvent(refresh_event);
 	}
-}
-
-void GeneralSettings2::UpdateOpenPakAccountStatus(const wxString& applyError)
-{
-	if (!m_openpak_account_status)
-		return;
-	if (!OpenPakAccount::IsSignedIn())
-	{
-		m_openpak_account_status->SetLabel(
-			_("Not signed in. Sign in to play online on OpenPak with this emulator."));
-		m_openpak_apply->Enable(false);
-		m_openpak_sign_out->Enable(false);
-		m_openpak_email->Enable(true);
-		m_openpak_password->Enable(true);
-		return;
-	}
-	m_openpak_apply->Enable(true);
-	m_openpak_sign_out->Enable(true);
-	m_openpak_email->Enable(false);
-	m_openpak_password->Enable(false);
-	wxString status = wxString::Format(_("Signed in as %s."), OpenPakAccount::GetUsername());
-	if (!applyError.empty())
-		status += " " + applyError;
-	m_openpak_account_status->SetLabel(status);
 }
 
 void GeneralSettings2::OnMLCPathSelect(wxCommandEvent& event)

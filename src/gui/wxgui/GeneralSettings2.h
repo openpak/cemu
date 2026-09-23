@@ -21,7 +21,7 @@ wxDECLARE_EVENT(wxEVT_ACCOUNTLIST_REFRESH, wxCommandEvent);
 class GeneralSettings2 : public wxDialog
 {
 public:
-	GeneralSettings2(wxWindow* parent, bool game_launched);
+	GeneralSettings2(wxWindow* parent, bool game_launched, bool openpakTab = false);
 	~GeneralSettings2();
 
 	[[nodiscard]] bool ShouldReloadGamelist() const  { return m_reload_gamelist; }
@@ -46,6 +46,7 @@ private:
 	wxPanel* AddAudioPage(wxNotebook* notebook);
 	wxPanel* AddOverlayPage(wxNotebook* notebook);
 	wxPanel* AddAccountPage(wxNotebook* notebook);
+	wxPanel* AddOpenPakPage(wxNotebook* notebook);
 	wxPanel* AddDebugPage(wxNotebook* notebook);
 
 	// General
@@ -94,16 +95,15 @@ private:
 	wxButton* m_create_account, * m_delete_account;
 	wxChoice* m_active_account;
 	wxRadioBox* m_active_service;
-	// OpenPak: the applied network profile and its refresh action (EP-5)
+	// OpenPak tab (UX spec §3.13)
+	wxCheckBox* m_openpak_enable = nullptr;
+	wxStaticText* m_openpak_account_status = nullptr;
+	wxButton* m_openpak_sign_in = nullptr;
+	wxCheckBox* m_openpak_cloud_sync = nullptr;
+	wxTextCtrl* m_openpak_website = nullptr;
 	wxButton* m_openpak_profile_refresh = nullptr;
 	wxStaticText* m_openpak_profile_status = nullptr;
-	// OpenPak: the account session (E3)
-	wxTextCtrl* m_openpak_email = nullptr;
-	wxTextCtrl* m_openpak_password = nullptr;
-	wxButton* m_openpak_sign_in = nullptr;
-	wxButton* m_openpak_sign_out = nullptr;
-	wxButton* m_openpak_apply = nullptr;
-	wxStaticText* m_openpak_account_status = nullptr;
+	int m_openpak_listener = 0;
 	wxCollapsiblePane* m_account_information;
 	wxPropertyGrid* m_account_grid;
 	wxBitmapButton* m_validate_online;
@@ -137,13 +137,10 @@ private:
 	void OnMLCPathClear(wxCommandEvent& event);
 	void OnShowOnlineValidator(wxCommandEvent& event);
 	void OnAccountServiceChanged(wxCommandEvent& event);
+	void OnOpenPakEnable(wxCommandEvent& event);
 	void OnOpenPakProfileRefresh(wxCommandEvent& event);
 	void UpdateOpenPakProfileStatus();
-	void OnOpenPakSignIn(wxCommandEvent& event);
-	void OnOpenPakSignInFinished(const wxString& error);
-	void OnOpenPakSignOut(wxCommandEvent& event);
-	void OnOpenPakApply(wxCommandEvent& event);
-	void UpdateOpenPakAccountStatus(const wxString& applyError = {});
+	void UpdateOpenPakTab();
 	void RefreshAccountListAfterOpenPakApply();
 	static wxString GetOnlineAccountErrorMessage(OnlineAccountError error);
 

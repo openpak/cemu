@@ -3,7 +3,8 @@
 // subwindows
 #include "TitleManager.h"
 #include "GeneralSettings2.h"
-#include "OpenPakFriendsWindow.h"
+#include "OpenPakUI.h"
+#include "OpenPakWindow.h"
 #include "GameUpdateWindow.h"
 #include "CemuUpdateWindow.h"
 #include "GraphicPacksWindow2.h"
@@ -115,7 +116,17 @@ enum
 	MAINFRAME_MENU_ID_TOOLS_TITLE_MANAGER,
 	MAINFRAME_MENU_ID_TOOLS_DOWNLOAD_MANAGER,
 	MAINFRAME_MENU_ID_TOOLS_EMULATED_USB_DEVICES,
-	MAINFRAME_MENU_ID_TOOLS_OPENPAK_FRIENDS,
+	// OpenPak (emulators/prds/openpak-ux-spec.md §3.1)
+	MAINFRAME_MENU_ID_OPENPAK_HEADER = 20650,
+	MAINFRAME_MENU_ID_OPENPAK_FRIENDS,
+	MAINFRAME_MENU_ID_OPENPAK_INVITATIONS,
+	MAINFRAME_MENU_ID_OPENPAK_SAVES,
+	MAINFRAME_MENU_ID_OPENPAK_MODS,
+	MAINFRAME_MENU_ID_OPENPAK_NEWS,
+	MAINFRAME_MENU_ID_OPENPAK_STATUS,
+	MAINFRAME_MENU_ID_OPENPAK_SETTINGS,
+	MAINFRAME_MENU_ID_OPENPAK_WEBSITE,
+	MAINFRAME_MENU_ID_OPENPAK_SIGN_OUT,
 	// cpu
 	// cpu->timer speed
 	MAINFRAME_MENU_ID_TIMER_SPEED_1X = 20700,
@@ -202,7 +213,9 @@ EVT_MENU(MAINFRAME_MENU_ID_TOOLS_MEMORY_SEARCHER, MainWindow::OnToolsInput)
 EVT_MENU(MAINFRAME_MENU_ID_TOOLS_TITLE_MANAGER, MainWindow::OnToolsInput)
 EVT_MENU(MAINFRAME_MENU_ID_TOOLS_DOWNLOAD_MANAGER, MainWindow::OnToolsInput)
 EVT_MENU(MAINFRAME_MENU_ID_TOOLS_EMULATED_USB_DEVICES, MainWindow::OnToolsInput)
-EVT_MENU(MAINFRAME_MENU_ID_TOOLS_OPENPAK_FRIENDS, MainWindow::OnToolsInput)
+// OpenPak menu
+EVT_MENU_RANGE(MAINFRAME_MENU_ID_OPENPAK_HEADER, MAINFRAME_MENU_ID_OPENPAK_SIGN_OUT, MainWindow::OnOpenPakMenu)
+EVT_MENU_OPEN(MainWindow::OnMenuOpen)
 // cpu menu
 EVT_MENU(MAINFRAME_MENU_ID_TIMER_SPEED_8X, MainWindow::OnDebugSetting)
 EVT_MENU(MAINFRAME_MENU_ID_TIMER_SPEED_4X, MainWindow::OnDebugSetting)
@@ -384,6 +397,19 @@ MainWindow::MainWindow()
 
 	if (LaunchSettings::OpenDebuggerEnabled())
 		OpenPPCDebugger();
+
+	// OpenPak: the menu, window, toasts and prompts share these hooks (UX spec §3).
+	OpenPakUI::SetHost({this,
+		[this](OpenPakUI::Page page) { OpenOpenPakWindow(page); },
+		[this]() { OpenSettings(true); },
+		[this]() { CallAfter([this]() { RecreateMenu(); }); }});
+	CallAfter([this, quick_launch]() {
+		// A stored sign-in the website refuses becomes a toast, never a prompt (§5.1); the
+		// connect prompt is once per install, and only on a plain interactive launch (§3.2).
+		OpenPakUI::CheckStoredSignIn();
+		if (!quick_launch && !LaunchSettings::GetPersistentId().has_value())
+			OpenPakUI::MaybeAskToConnect(this);
+	});
 }
 
 MainWindow::~MainWindow()
@@ -846,12 +872,12 @@ WXLRESULT MainWindow::MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lPara
 }
 #endif
 
-void MainWindow::OpenSettings()
+void MainWindow::OpenSettings(bool openpakTab)
 {
 	auto& config = GetWxGUIConfig();
 	const auto language = config.language;
 
-	GeneralSettings2 frame(this, m_game_launched);
+	GeneralSettings2 frame(this, m_game_launched, openpakTab);
 	frame.ShowModal();
 	const bool paths_modified = frame.ShouldReloadGamelist();
 	const bool mlc_modified = frame.MLCModified();
@@ -1540,26 +1566,6 @@ void MainWindow::OnToolsInput(wxCommandEvent& event)
 		}
 		break;
 	}
-	case MAINFRAME_MENU_ID_TOOLS_OPENPAK_FRIENDS:
-	{
-		if (m_openpak_friends)
-		{
-			m_openpak_friends->Show(true);
-			m_openpak_friends->Raise();
-			m_openpak_friends->SetFocus();
-		}
-		else
-		{
-			m_openpak_friends = new OpenPakFriendsWindow(this);
-			m_openpak_friends->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event)
-				{
-					m_openpak_friends->Show(false);
-					event.Veto();
-				});
-			m_openpak_friends->Show(true);
-		}
-		break;
-	}
 	case MAINFRAME_MENU_ID_TOOLS_EMULATED_USB_DEVICES:
 	{
 		if (m_usb_devices)
@@ -2158,6 +2164,106 @@ protected:
 	wxSizer* m_scrolledSizer;
 };
 
+// OpenPak: the menu (emulators/prds/openpak-ux-spec.md §3.1). Item states and the header are
+// recomputed each time the menu opens; the header's avatar is set when the menu is rebuilt.
+void MainWindow::UpdateOpenPakMenu(bool rebuildHeader)
+{
+	if (!m_openpakMenu)
+		return;
+	const bool running = m_game_launched;
+	const bool on = OpenPakUI::IsOn();
+	const bool signedIn = on && OpenPakUI::IsSignedIn();
+
+	const wxString header = signedIn ? wxString::Format(_("Signed in as %s"), OpenPakUI::SignedInName()) : _("Sign in to OpenPak...");
+	if (rebuildHeader)
+	{
+		m_openpakMenu->Destroy(MAINFRAME_MENU_ID_OPENPAK_HEADER);
+		auto* item = new wxMenuItem(m_openpakMenu, MAINFRAME_MENU_ID_OPENPAK_HEADER, header);
+		if (signedIn)
+		{
+			const wxBitmap avatar = OpenPakUI::Avatar(FromDIP(20));
+			if (avatar.IsOk())
+				item->SetBitmap(avatar);
+		}
+		m_openpakMenu->Insert(0, item);
+	}
+	else
+		m_openpakMenu->SetLabel(MAINFRAME_MENU_ID_OPENPAK_HEADER, header);
+
+	// Signed out: disabled while a game runs. OpenPak off: the header opens the settings.
+	const bool headerEnabled = signedIn || !on || !running;
+	m_openpakMenu->Enable(MAINFRAME_MENU_ID_OPENPAK_HEADER, headerEnabled);
+	m_openpakMenu->SetHelpString(MAINFRAME_MENU_ID_OPENPAK_HEADER, headerEnabled ? wxString() : _("Stop the running game first."));
+	m_openpakMenu->Enable(MAINFRAME_MENU_ID_OPENPAK_FRIENDS, signedIn);
+	m_openpakMenu->Enable(MAINFRAME_MENU_ID_OPENPAK_INVITATIONS, signedIn);
+	m_openpakMenu->Enable(MAINFRAME_MENU_ID_OPENPAK_SAVES, signedIn);
+	m_openpakMenu->Enable(MAINFRAME_MENU_ID_OPENPAK_SIGN_OUT, signedIn && !running);
+	m_openpakMenu->SetHelpString(MAINFRAME_MENU_ID_OPENPAK_SIGN_OUT, signedIn && running ? _("Stop the running game first.") : wxString());
+}
+
+void MainWindow::OnMenuOpen(wxMenuEvent& event)
+{
+	if (event.GetMenu() == m_openpakMenu)
+		UpdateOpenPakMenu(false);
+	event.Skip();
+}
+
+void MainWindow::OnOpenPakMenu(wxCommandEvent& event)
+{
+	switch (event.GetId())
+	{
+	case MAINFRAME_MENU_ID_OPENPAK_HEADER:
+		if (!OpenPakUI::IsOn())
+			OpenSettings(true);
+		else if (OpenPakUI::IsSignedIn())
+			OpenOpenPakWindow(OpenPakUI::Page::Account);
+		else if (!m_game_launched)
+			OpenPakUI::SignIn(this);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_FRIENDS:
+		OpenOpenPakWindow(OpenPakUI::Page::Friends);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_INVITATIONS:
+		OpenOpenPakWindow(OpenPakUI::Page::Invitations);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_SAVES:
+		OpenOpenPakWindow(OpenPakUI::Page::Saves);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_MODS:
+		OpenOpenPakWindow(OpenPakUI::Page::Mods);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_NEWS:
+		OpenOpenPakWindow(OpenPakUI::Page::News);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_STATUS:
+		OpenOpenPakWindow(OpenPakUI::Page::Status);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_SETTINGS:
+		OpenSettings(true);
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_WEBSITE:
+		OpenPakUI::OpenWebsite();
+		break;
+	case MAINFRAME_MENU_ID_OPENPAK_SIGN_OUT:
+		OpenPakUI::ConfirmAndSignOut(this);
+		break;
+	default:
+		break;
+	}
+}
+
+void MainWindow::OpenOpenPakWindow(OpenPakUI::Page page)
+{
+	if (OpenPakWindow* open = OpenPakWindow::Current())
+	{
+		open->ShowPage(page);
+		open->Raise();
+		return;
+	}
+	OpenPakWindow window(this, page);
+	window.ShowModal();
+}
+
 void MainWindow::OnHelpAbout(wxCommandEvent& event)
 {
 	CemuAboutDialog dlgAbout(this);
@@ -2300,7 +2406,6 @@ void MainWindow::RecreateMenu()
 	toolsMenu->Append(MAINFRAME_MENU_ID_TOOLS_TITLE_MANAGER, _("&Title Manager"));
 	toolsMenu->Append(MAINFRAME_MENU_ID_TOOLS_DOWNLOAD_MANAGER, _("&Download Manager"));
 	toolsMenu->Append(MAINFRAME_MENU_ID_TOOLS_EMULATED_USB_DEVICES, _("&Emulated USB Devices"));
-	toolsMenu->Append(MAINFRAME_MENU_ID_TOOLS_OPENPAK_FRIENDS, _("OpenPak friends"));
 
 	m_menuBar->Append(toolsMenu, _("&Tools"));
 
@@ -2412,6 +2517,22 @@ void MainWindow::RecreateMenu()
 	// debugMenu->Append(MAINFRAME_MENU_ID_DEBUG_DUMP_FST, _("&Dump WUD filesystem"))->Enable(false);
 
 	m_menuBar->Append(debugMenu, _("&Debug"));
+	// OpenPak menu: top level, immediately left of Help, always visible (UX spec §3.1)
+	m_openpakMenu = new wxMenu();
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_HEADER, _("Sign in to OpenPak..."));
+	m_openpakMenu->AppendSeparator();
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_FRIENDS, _("Friends"));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_INVITATIONS, _("Invitations"));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_SAVES, _("Cloud saves"));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_MODS, _("Mods"));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_NEWS, _("News"));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_STATUS, _("Status"));
+	m_openpakMenu->AppendSeparator();
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_SETTINGS, _("OpenPak settings..."));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_WEBSITE, _("OpenPak website"));
+	m_openpakMenu->Append(MAINFRAME_MENU_ID_OPENPAK_SIGN_OUT, _("Sign out..."));
+	m_menuBar->Append(m_openpakMenu, _("OpenPak"));
+	UpdateOpenPakMenu(true);
 	// help menu
 	wxMenu* helpMenu = new wxMenu();
 	m_check_update_menu = helpMenu->Append(MAINFRAME_MENU_ID_HELP_UPDATE, _("&Check for updates"));
