@@ -1,6 +1,8 @@
 #include "Cemu/OpenPak/Account.h"
 
+#include "Cemu/OpenPak/Errors.h"
 #include "Cemu/OpenPak/NetworkProfile.h"
+#include "Cemu/OpenPak/Prefs.h"
 #include "Cemu/Logging/CemuLogging.h"
 #include "Cemu/ncrypto/ncrypto.h"
 #include "Cafe/Account/Account.h"
@@ -23,6 +25,7 @@
 #include <mutex>
 #include <random>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 namespace
@@ -100,22 +103,9 @@ namespace
 		file << "bearer=" << g_bearer << std::endl;
 	}
 
-	// The website API base. OPENPAK_API is honoured exactly like the network
-	// profile does: https, or loopback for a local stack. TLS is never switched
-	// off here — the bearer only travels to a publicly certified openpak.org.
-	std::string ApiBase()
-	{
-		std::string base = "https://openpak.org";
-		if (const char* env = getenv("OPENPAK_API"))
-		{
-			std::string candidate = env;
-			std::transform(candidate.begin(), candidate.end(), candidate.begin(), ::tolower);
-			if (candidate.rfind("https://", 0) == 0 || candidate.rfind("http://127.0.0.1", 0) == 0 ||
-				candidate.rfind("http://localhost", 0) == 0 || candidate.rfind("http://[::1]", 0) == 0)
-				base = env;
-		}
-		return base;
-	}
+	// The website API base: OPENPAK_API, else the Website setting, https or loopback only.
+	// TLS is never switched off here — the bearer only travels to a certified website.
+	std::string ApiBase() { return OpenPakPrefs::ApiBase(); }
 
 	size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata)
 	{
@@ -170,12 +160,22 @@ namespace
 		return out;
 	}
 
+	// The server's own sentence when it sent one; otherwise the HTTP code goes to the log and
+	// the UI says the website could not be reached.
 	std::string ErrorFrom(const std::string& body, long status)
 	{
 		rapidjson::Document doc;
-		if (!doc.Parse(body.c_str()).HasParseError() && doc.HasMember("error") && doc["error"].IsString())
-			return doc["error"].GetString();
-		return fmt::format("the request failed (HTTP {})", status);
+		if (!doc.Parse(body.c_str()).HasParseError() && doc.HasMember("error") && doc["error"].IsString() &&
+			doc["error"].GetStringLength() > 0)
+			return OpenPakError::Server(doc["error"].GetString());
+		cemuLog_log(LogType::Force, "OpenPak: the account request failed (HTTP {})", status);
+		return OpenPakError::Unreachable;
+	}
+
+	std::string TransportError(const std::string& error)
+	{
+		cemuLog_log(LogType::Force, "OpenPak: could not reach the website: {}", error);
+		return OpenPakError::Unreachable;
 	}
 
 	std::string JsonString(const rapidjson::Value& doc, const char* field)
@@ -246,7 +246,7 @@ namespace
 
 namespace OpenPakAccount
 {
-	SignInResult SignIn(std::string_view email, std::string_view password)
+	SignInResult SignIn(std::string_view email, std::string_view password, std::string_view deviceName)
 	{
 		SignInResult out;
 		EnsureLoaded();
@@ -258,22 +258,28 @@ namespace OpenPakAccount
 		writer.String(email.data(), email.size());
 		writer.Key("password");
 		writer.String(password.data(), password.size());
+		if (!deviceName.empty())
+		{
+			// how this machine appears in the account's device list (UX spec §3.3)
+			writer.Key("device_name");
+			writer.String(deviceName.data(), deviceName.size());
+		}
 		writer.EndObject();
 
 		const auto minted = Request("POST", ApiBase() + "/api/v1/token", sb.GetString(), {});
 		if (!minted.error.empty())
 		{
-			out.error = "could not reach openpak.org: " + minted.error;
+			out.error = TransportError(minted.error);
 			return out;
 		}
-		if (minted.status == 401)
+		if (minted.status == 401 || minted.status == 403)
 		{
-			out.error = "Wrong email or password.";
+			out.error = OpenPakError::Credentials;
 			return out;
 		}
 		if (minted.status == 429)
 		{
-			out.error = "Too many attempts. Wait a minute and try again.";
+			out.error = OpenPakError::RateLimited;
 			return out;
 		}
 		if (minted.status != 200 && minted.status != 201)
@@ -285,7 +291,8 @@ namespace OpenPakAccount
 		if (tokenDoc.Parse(minted.body.c_str()).HasParseError() || !tokenDoc.HasMember("token") ||
 			!tokenDoc["token"].IsString())
 		{
-			out.error = "the sign-in response was not understood";
+			cemuLog_log(LogType::Force, "OpenPak: the sign-in response was not understood");
+			out.error = OpenPakError::Unreachable;
 			return out;
 		}
 		const std::string bearer = tokenDoc["token"].GetString();
@@ -296,7 +303,7 @@ namespace OpenPakAccount
 			{fmt::format("Authorization: Bearer {}", bearer)});
 		if (!identity.error.empty())
 		{
-			out.error = "could not reach openpak.org: " + identity.error;
+			out.error = TransportError(identity.error);
 			return out;
 		}
 		if (identity.status != 200)
@@ -307,7 +314,8 @@ namespace OpenPakAccount
 		rapidjson::Document idDoc;
 		if (idDoc.Parse(identity.body.c_str()).HasParseError())
 		{
-			out.error = "the identity response was not understood";
+			cemuLog_log(LogType::Force, "OpenPak: the identity response was not understood");
+			out.error = OpenPakError::Unreachable;
 			return out;
 		}
 		const uint32 pid = JsonUint(idDoc, "pid");
@@ -316,7 +324,8 @@ namespace OpenPakAccount
 		const std::string passwordCache = JsonString(idDoc, "password_cache");
 		if (pid == 0 || username.empty() || miiData.empty() || passwordCache.empty())
 		{
-			out.error = "the account has no Wii U identity; is the OpenPak Wii U adapter online?";
+			cemuLog_log(LogType::Force, "OpenPak: the account has no Wii U identity; is the Wii U adapter online?");
+			out.error = OpenPakError::NoIdentity;
 			return out;
 		}
 
@@ -333,14 +342,7 @@ namespace OpenPakAccount
 			g_language = JsonString(idDoc, "language");
 			SaveSession();
 		}
-
-		out.error = ApplyIdentity();
-		out.ok = out.error.empty();
-		if (!out.ok)
-		{
-			// keep the session (the identity is real), surface the apply error
-			cemuLog_log(LogType::Force, "OpenPak: signed in, but applying the identity failed: {}", out.error);
-		}
+		out.ok = true;
 		return out;
 	}
 
@@ -362,9 +364,60 @@ namespace OpenPakAccount
 			g_language.clear();
 			SaveSession();
 		}
-		// End the website session too; best-effort and only over public TLS.
+		// End the website session too: best-effort, in the background, so presence ends now
+		// without the UI waiting on the network.
 		if (!bearer.empty())
-			Request("DELETE", ApiBase() + "/api/v1/token", {}, {fmt::format("Authorization: Bearer {}", bearer)});
+		{
+			std::thread([bearer, base = ApiBase()]() {
+				Request("DELETE", base + "/api/v1/token", {}, {fmt::format("Authorization: Bearer {}", bearer)});
+			}).detach();
+		}
+	}
+
+	bool DropIfRejected()
+	{
+		const std::string bearer = GetBearer();
+		if (bearer.empty())
+			return false;
+		const auto resp = Request("GET", ApiBase() + "/api/v1/me", {}, {fmt::format("Authorization: Bearer {}", bearer)});
+		if (!resp.error.empty() || resp.status != 401)
+			return false;
+		{
+			std::lock_guard lock(g_mutex);
+			if (g_bearer != bearer)
+				return false; // signed in again meanwhile
+			g_bearer.clear();
+			SaveSession();
+		}
+		cemuLog_log(LogType::Force, "OpenPak: the stored sign-in was refused; signed out");
+		return true;
+	}
+
+	std::string GetMiiName()
+	{
+		EnsureLoaded();
+		std::lock_guard lock(g_mutex);
+		return g_miiName;
+	}
+
+	uint32_t GetPid()
+	{
+		EnsureLoaded();
+		std::lock_guard lock(g_mutex);
+		return g_pid;
+	}
+
+	uint32_t AppliedSlot()
+	{
+		const uint32 slot = OpenPakPrefs::Slot();
+		if (slot == 0)
+			return 0;
+		for (const auto& account : Account::GetAccounts())
+		{
+			if (account.GetPersistentId() == slot)
+				return slot;
+		}
+		return 0;
 	}
 
 	bool IsSignedIn()
@@ -410,9 +463,43 @@ namespace OpenPakAccount
 		if (miiBytes.size() != 96 || cacheBytes.size() != 32)
 			return "the stored identity is malformed; sign in again";
 
-		// Account slots are 0x80000001..: take the next free one.
+		// UX spec §5.10: write into the Mii account OpenPak used before — the remembered slot,
+		// else one already holding this PID (an earlier build made a new one per sign-in) — and
+		// take a new slot only when there is none.
 		Account::RefreshAccounts();
-		const uint32 persistentId = Account::GetNextPersistentId();
+		uint32 persistentId = 0;
+		std::array<uint8, 16> uuid{};
+		bool haveUuid = false;
+		const uint32 remembered = OpenPakPrefs::Slot();
+		for (const auto& account : Account::GetAccounts())
+		{
+			if (remembered != 0 && account.GetPersistentId() == remembered)
+			{
+				persistentId = remembered;
+				uuid = account.GetUuid();
+				haveUuid = true;
+				break;
+			}
+		}
+		if (persistentId == 0)
+		{
+			for (const auto& account : Account::GetAccounts())
+			{
+				if (account.GetPrincipalId() == pid)
+				{
+					persistentId = account.GetPersistentId();
+					uuid = account.GetUuid();
+					haveUuid = true;
+					break;
+				}
+			}
+		}
+		if (persistentId == 0)
+		{
+			if (!Account::HasFreeAccountSlots())
+				return "every Mii account slot is taken; delete one in General settings > Account";
+			persistentId = Account::GetNextPersistentId();
+		}
 
 		// account.dat in the exact shape Account::ParseFile reads.
 		const auto accountDir = ActiveSettings::GetMlcPath(fmt::format(L"usr/save/system/act/{:08x}", persistentId));
@@ -421,7 +508,7 @@ namespace OpenPakAccount
 		if (ec)
 			return fmt::format("cannot create the account directory: {}", ec.message());
 
-		std::array<uint8, 16> uuid{};
+		if (!haveUuid)
 		{
 			std::mt19937 rng(std::random_device{}());
 			std::uniform_int_distribution<int> dist(0, 255);
@@ -462,6 +549,7 @@ namespace OpenPakAccount
 		}
 
 		Account::UpdatePersisidDat();
+		OpenPakPrefs::SetSlot(persistentId);
 
 		// Select the account and point it at the OpenPak service.
 		GetConfig().account.m_persistent_id = persistentId;

@@ -13,8 +13,11 @@ add_library(CemuComponents
   OpenPak/Account.h
   OpenPak/DeviceIdentity.cpp
   OpenPak/DeviceIdentity.h
+  OpenPak/Errors.h
   OpenPak/NetworkProfile.cpp
   OpenPak/NetworkProfile.h
+  OpenPak/Prefs.cpp
+  OpenPak/Prefs.h
   OpenPak/Social.cpp
   OpenPak/Social.h
   napi/napi.h
