@@ -10,6 +10,7 @@
 #include "config/ActiveSettings.h"
 #include "config/NetworkSettings.h"
 #include "config/LaunchSettings.h"
+#include "Common/version.h"
 #include "pugixml.hpp"
 #include <charconv>
 
@@ -151,6 +152,12 @@ void CurlRequestHelper::initate(NetworkService service, std::string url, SERVER_
 	m_headerExtraFields.clear();
 	m_postData.clear();
 	m_cbWriteCallback = nullptr;
+
+	// OpenPak: name the emulator on every request to its account services, so the
+	// NEX token issued here is recorded as Cemu's and friends see "on Cemu" rather
+	// than "on Wii U" for the same PNID.
+	if (service == NetworkService::OpenPak)
+		addHeaderField("X-OpenPak-Client", std::string("cemu/") + BUILD_VERSION_STRING);
 
 	curl_easy_setopt(m_curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(m_curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_DEFAULT);
