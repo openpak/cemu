@@ -87,6 +87,7 @@ jobs:
       with:
         name: cemu-bin-linux-${{ matrix.arch }}
         path: ./bin/Cemu
+        retention-days: 3
 
   build-appimage:
     strategy:
@@ -126,6 +127,7 @@ jobs:
       with:
         name: cemu-appimage-${{ matrix.arch }}
         path: artifacts
+        retention-days: 3
 
   build-windows:
     runs-on: windows-2022
@@ -197,12 +199,14 @@ jobs:
       with:
         name: cemu-bin-windows-x64
         path: ./bin/Cemu.exe
+        retention-days: 3
 
     - name: Upload NSIS Installer
       uses: actions/upload-artifact@v6
       with:
         name: cemu-installer-windows-x64
         path: ./src/resource/cemu-${{ inputs.next_version_major }}.${{ inputs.next_version_minor }}-windows-x64-installer.exe
+        retention-days: 3
 
   build-macos:
     runs-on: macos-14
@@ -297,3 +301,4 @@ jobs:
       with:
         name: cemu-bin-macos-${{ matrix.arch }}
         path: ./bin/Cemu.dmg
+        retention-days: 3

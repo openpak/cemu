@@ -41,3 +41,4 @@ jobs:
           name: POT file
           path: ./cemu.pot
           if-no-files-found: error
+          retention-days: 3
