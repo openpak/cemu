@@ -11,6 +11,7 @@
 
 #include "wxgui/LoggingWindow.h"
 #include "wxgui/components/wxGameList.h"
+#include "wxgui/OpenPakUI.h"
 
 #include <future>
 #include "Cafe/HW/Espresso/Debugger/GDBStub.h"
@@ -22,7 +23,6 @@ class DiscordPresence;
 class TitleManager;
 class GraphicPacksWindow2;
 class EmulatedUSBDeviceFrame;
-class OpenPakFriendsWindow;
 class wxLaunchGameEvent;
 
 wxDECLARE_EVENT(wxEVT_LAUNCH_GAME, wxLaunchGameEvent);
@@ -82,7 +82,7 @@ public:
 #if BOOST_OS_WINDOWS
 	WXLRESULT MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam) override;
 #endif
-	void OpenSettings();
+	void OpenSettings(bool openpakTab = false);
 
 	PadViewFrame* GetPadView() const { return m_padView; }
 
@@ -131,6 +131,8 @@ public:
 	void OnChar(wxKeyEvent& event);
 
 	void OnToolsInput(wxCommandEvent& event);
+	void OnOpenPakMenu(wxCommandEvent& event);
+	void OnMenuOpen(wxMenuEvent& event);
 	void OnGesturePan(wxPanGestureEvent& event);
 
 	void OnGameLoaded();
@@ -150,6 +152,8 @@ public:
 private:
 	bool FullscreenEnabled() const;
 	void RecreateMenu();
+	void UpdateOpenPakMenu(bool rebuildHeader);
+	void OpenOpenPakWindow(OpenPakUI::Page page);
 	void UpdateChildWindowTitleRunningState();
 	static wxString GetInitialWindowTitle();
 
@@ -170,7 +174,7 @@ private:
 	MemorySearcherTool* m_toolWindow = nullptr;
 	TitleManager* m_title_manager = nullptr;
 	EmulatedUSBDeviceFrame* m_usb_devices = nullptr;
-	OpenPakFriendsWindow* m_openpak_friends = nullptr;
+	wxMenu* m_openpakMenu = nullptr;
 	PadViewFrame* m_padView = nullptr;
 	GraphicPacksWindow2* m_graphic_pack_window = nullptr;
 

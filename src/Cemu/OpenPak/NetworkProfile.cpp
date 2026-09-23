@@ -1,4 +1,5 @@
 #include "Cemu/OpenPak/NetworkProfile.h"
+#include "Cemu/OpenPak/Prefs.h"
 
 #include <array>
 #include <cctype>
@@ -184,17 +185,10 @@ long FetchOnce(std::string const& etag_sent, std::string& body, std::string& eta
 	if (!curl)
 		return 0;
 
-	// OPENPAK_API is honoured the same way napi's servers are: https, or loopback for a
-	// local stack. TLS verification is never switched off — the profile arrives from a
-	// publicly certified openpak.org or not at all.
-	std::string base = "https://openpak.org";
-	if (const char* env = getenv("OPENPAK_API"))
-	{
-		if (std::string candidate = ToLower(env);
-			candidate.rfind("https://", 0) == 0 || candidate.rfind("http://127.0.0.1", 0) == 0 ||
-			candidate.rfind("http://localhost", 0) == 0 || candidate.rfind("http://[::1]", 0) == 0)
-			base = env;
-	}
+	// OPENPAK_API, else the Website setting (Advanced), https or loopback for a local stack.
+	// TLS verification is never switched off — the profile arrives from a certified website
+	// or not at all.
+	const std::string base = OpenPakPrefs::ApiBase();
 
 	std::string url = base + "/api/v1/network/profile?platform=" + kPlatform;
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
