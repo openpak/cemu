@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <string>
@@ -45,28 +47,21 @@ std::string ReadFile(std::filesystem::path const& path)
 	std::error_code ec;
 	if (!std::filesystem::exists(path, ec))
 		return {};
-	std::FILE* f = std::fopen(path.c_str(), "rb");
+	std::ifstream f(path, std::ios::binary);
 	if (!f)
 		return {};
-	std::string out;
-	char buffer[4096];
-	size_t n;
-	while ((n = std::fread(buffer, 1, sizeof(buffer), f)) > 0)
-		out.append(buffer, n);
-	std::fclose(f);
-	return out;
+	return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
 bool WriteFile(std::filesystem::path const& path, std::string const& contents)
 {
 	std::error_code ec;
 	std::filesystem::create_directories(path.parent_path(), ec);
-	std::FILE* f = std::fopen(path.c_str(), "wb");
+	std::ofstream f(path, std::ios::binary | std::ios::trunc);
 	if (!f)
 		return false;
-	const bool ok = std::fwrite(contents.data(), 1, contents.size(), f) == contents.size();
-	std::fclose(f);
-	return ok;
+	f.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+	return static_cast<bool>(f);
 }
 
 std::string ToLower(std::string s)
