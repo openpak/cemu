@@ -9,6 +9,13 @@ on:
       next_version_minor:
         required: false
         type: string
+      # OpenPak: the release tag. When set, each build job zips its own output and attaches it to
+      # that release (created by openpak_release.yml) instead of passing workflow artifacts on:
+      # the organisation's artifact quota can be full and stop a release (2026-09-23).
+      release_tag:
+        required: false
+        type: string
+        default: ''
 
 env:
   VCPKG_ROOT: "${{github.workspace}}/dependencies/vcpkg"
@@ -83,11 +90,31 @@ jobs:
       run: mv bin/Cemu_release bin/Cemu
 
     - name: Upload artifact
+      if: ${{ inputs.release_tag == '' }}
       uses: actions/upload-artifact@v6
       with:
         name: cemu-bin-linux-${{ matrix.arch }}
         path: ./bin/Cemu
         retention-days: 3
+
+    - name: "Build AppImage (release)"
+      if: ${{ inputs.release_tag != '' }}
+      run: |
+        sudo apt install -y appstream
+        export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
+        export DEPLOY_GTK_VERSION=3
+        dist/linux/appimage.sh ${{ runner.arch }}
+
+    - name: "Attach to the release"
+      if: ${{ inputs.release_tag != '' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.release_tag }}
+      run: |
+        mkdir -p upload
+        (cd bin && zip -q "../upload/cemu-bin-linux-${{ matrix.arch }}-${TAG}.zip" Cemu)
+        (cd artifacts && zip -q "../upload/cemu-appimage-${{ matrix.arch }}-${TAG}.zip" *.AppImage)
+        gh release upload "$TAG" upload/* --repo "$GITHUB_REPOSITORY" --clobber
 
   build-appimage:
     strategy:
@@ -102,6 +129,8 @@ jobs:
     name: build-appimage-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     needs: build-ubuntu
+    # A release builds its AppImage in build-ubuntu and attaches it from there.
+    if: ${{ inputs.release_tag == '' }}
     steps:
     - name: Checkout Upstream Repo
       uses: actions/checkout@v6
@@ -195,6 +224,7 @@ jobs:
         makensis /DPRODUCT_VERSION=${{ inputs.next_version_major }}.${{ inputs.next_version_minor }} installer.nsi
 
     - name: Upload artifact
+      if: ${{ inputs.release_tag == '' }}
       uses: actions/upload-artifact@v6
       with:
         name: cemu-bin-windows-x64
@@ -202,11 +232,24 @@ jobs:
         retention-days: 3
 
     - name: Upload NSIS Installer
+      if: ${{ inputs.release_tag == '' }}
       uses: actions/upload-artifact@v6
       with:
         name: cemu-installer-windows-x64
         path: ./src/resource/cemu-${{ inputs.next_version_major }}.${{ inputs.next_version_minor }}-windows-x64-installer.exe
         retention-days: 3
+
+    - name: Attach to the release
+      if: ${{ inputs.release_tag != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.release_tag }}
+      run: |
+        mkdir -p upload
+        7z a "upload/cemu-bin-windows-x64-${TAG}.zip" ./bin/Cemu.exe >/dev/null
+        7z a "upload/cemu-installer-windows-x64-${TAG}.zip" ./src/resource/cemu-*-windows-x64-installer.exe >/dev/null
+        gh release upload "$TAG" upload/* --repo "$GITHUB_REPOSITORY" --clobber
 
   build-macos:
     runs-on: macos-14
@@ -297,8 +340,19 @@ jobs:
         rm bin/tmp.dmg
 
     - name: Upload artifact
+      if: ${{ inputs.release_tag == '' }}
       uses: actions/upload-artifact@v6
       with:
         name: cemu-bin-macos-${{ matrix.arch }}
         path: ./bin/Cemu.dmg
         retention-days: 3
+
+    - name: Attach to the release
+      if: ${{ inputs.release_tag != '' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.release_tag }}
+      run: |
+        mkdir -p upload
+        (cd bin && zip -q "../upload/cemu-bin-macos-${{ matrix.arch }}-${TAG}.zip" Cemu.dmg)
+        gh release upload "$TAG" upload/* --repo "$GITHUB_REPOSITORY" --clobber
