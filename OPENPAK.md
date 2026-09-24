@@ -18,8 +18,25 @@ The service URLs are not only compiled in: at launch Cemu fetches the OpenPak **
 profile** (`GET <website>/api/v1/network/profile?platform=wiiu`, one conditional GET,
 two-second timeout — emulators/prds/emulator-network-profile-prd.md) and fills the ten URLs
 from its `services[]` by id. A service the profile does not name keeps its compiled-in URL; a
-profile that fails validation is rejected whole and the last-known-good (or compiled-in) URLs
+profile of the wrong shape is rejected whole and the last-known-good (or compiled-in) URLs
 apply, so a game starts either way.
+
+**Signed redirect ceiling** (`docs/signed-ceiling.md`, `src/Cemu/OpenPak/Ceiling.cpp`). The
+domain families Cemu may address are no longer only compiled in: alongside the profile Cemu
+fetches `https://openpak.org/api/v1/network/ceiling` (pinned origin, public TLS, two seconds, in
+parallel with the profile), verifies the Ed25519 signature over the payload bytes with OpenSSL
+(`EVP_PKEY_ED25519`) under the pinned key list, refuses a version below the highest one accepted
+(`config/openpak_network_ceiling.version`) and caches the envelope bytes as received
+(`config/openpak_network_ceiling.json`, atomic, 0600). Any failure keeps the cached verified
+ceiling, or with none the old compiled families (the first-boot fallback, never updated again).
+The profile's `wiiu` names go through it one by one: a service whose host lies outside is dropped
+(that id keeps its compiled-in URL) and logged; so is a `redirect.suffixes`/`exact` entry — never
+the whole profile. The effective set is the ten resolved service URLs; its sha256 is taken at
+launch and after every refresh — the Refresh button, a re-check every six hours ±10 %, and one
+after an OpenPak sign-in. A digest not seen before raises one OPENPAK toast, *OpenPak updated this
+system's network redirects. Restart the game to use them.* (over a running game it goes to the
+overlay like every toast), only while the active account uses the OpenPak service. Only wiiu
+services go into the digest, so a Switch change never notifies.
 
 ## The OpenPak menu, window and settings (emulators/prds/openpak-ux-spec.md, Wii U family)
 

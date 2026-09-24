@@ -11,6 +11,8 @@ add_library(CemuComponents
   napi/napi.cpp
   OpenPak/Account.cpp
   OpenPak/Account.h
+  OpenPak/Ceiling.cpp
+  OpenPak/Ceiling.h
   OpenPak/DeviceIdentity.cpp
   OpenPak/DeviceIdentity.h
   OpenPak/Errors.h

@@ -105,4 +105,12 @@ namespace OpenPakUI
 	// The friends poller behind the friend and invitation toasts; runs while signed in.
 	void StartPoller();
 	void StopPoller();
+
+	// The signed-ceiling change notice (docs/signed-ceiling.md, rule 4): hooks the network
+	// profile's change listener to one OPENPAK toast per new effective wiiu set, and starts the
+	// six-hour (±10 %) re-check. Once, after SetHost.
+	void StartNetworkWatch();
+
+	// Re-fetches the ceiling and the profile off the UI thread (the timer, after a sign-in).
+	void RecheckNetwork();
 }

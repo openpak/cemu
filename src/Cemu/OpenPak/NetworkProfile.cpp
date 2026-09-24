@@ -1,6 +1,8 @@
 #include "Cemu/OpenPak/NetworkProfile.h"
+#include "Cemu/OpenPak/Ceiling.h"
 #include "Cemu/OpenPak/Prefs.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdint>
@@ -9,9 +11,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <functional>
+#include <future>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -23,6 +29,7 @@
 #endif
 #include <curl/curl.h>
 #include <fmt/core.h>
+#include <openssl/evp.h>
 #include <rapidjson/document.h>
 
 #include "config/ActiveSettings.h"
@@ -35,10 +42,24 @@ constexpr const char* kPlatform = "wiiu";
 // Two seconds is generous for a profile that must never hold a launch open.
 constexpr long kTimeoutMs = 2000;
 
+std::mutex g_refreshMutex; // one Refresh at a time (launch, the settings button, the re-check)
 std::mutex g_mutex;
 std::map<std::string, std::string> g_applied; // id -> url, from the last validated profile
 std::string g_source = "built-in";
 int g_version = -1;
+std::string g_lastDrops; // the dropped names last logged, so a repeat is not logged again
+
+// Change notice (docs/signed-ceiling.md, client rule 4): the digest of the effective set in use,
+// every digest a notice was already raised for, and who shows it.
+bool g_haveDigest = false;
+std::string g_digestInUse;
+std::set<std::string> g_notified;
+std::function<void()> g_onChange;
+
+// The ids ServiceURL answers; the effective set is their resolved URLs.
+constexpr std::array<const char*, 10> kServiceIds{
+	"act", "boss", "ccs", "ccsu", "ecs", "ias", "idbe", "nus", "olv", "tagaya",
+};
 
 std::filesystem::path ProfilePath() { return ActiveSettings::GetConfigPath("openpak_network_profile.json"); }
 std::filesystem::path EtagPath() { return ActiveSettings::GetConfigPath("openpak_network_profile.etag"); }
@@ -70,34 +91,6 @@ std::string ToLower(std::string s)
 	for (char& c : s)
 		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 	return s;
-}
-
-// The compiled-in ceiling (emulators/prds/emulator-network-profile-prd.md §3): the domain families Cemu
-// will ever address. The profile chooses within it; anything outside rejects the whole
-// profile. A name sits inside a family on a label boundary, so "a.nintendo.net" is in and
-// "evila.nintendo.net.evil.example" is not.
-const std::array<const char*, 7>& AllowedFamilies()
-{
-	static const std::array<const char*, 7> families{
-		".nintendo.net", ".nintendo.com",        ".nintendo.co.jp", ".nintendowifi.net",
-		".nintendo-europe.com", ".gamespy.com",  ".openpak.org",
-	};
-	return families;
-}
-
-bool NameAllowed(const std::string& host)
-{
-	const std::string name = ToLower(host);
-	if (name.empty() || name.front() == '.' || name.find('/') != std::string::npos ||
-		name.find('@') != std::string::npos)
-		return false;
-	for (const char* family : AllowedFamilies())
-	{
-		const size_t n = std::strlen(family);
-		if (name.size() > n && name.compare(name.size() - n, n, family) == 0)
-			return true;
-	}
-	return false;
 }
 
 // A literal IPv4/IPv6 address that is safe to point traffic at: never a name, never loopback,
@@ -180,7 +173,6 @@ size_t WriteHeader(char* ptr, size_t size, size_t nmemb, void* userdata)
 // moving the goalposts mid-request.
 long FetchOnce(std::string const& etag_sent, std::string& body, std::string& etag_out)
 {
-	curl_global_init(CURL_GLOBAL_DEFAULT);
 	CURL* curl = curl_easy_init();
 	if (!curl)
 		return 0;
@@ -216,9 +208,30 @@ long FetchOnce(std::string const& etag_sent, std::string& body, std::string& eta
 	return status;
 }
 
-// Applies services[] by id. A missing id keeps its compiled-in value rather than emptying.
-void Apply(const rapidjson::Document& doc)
+// Applies services[] by id, through the ceiling for wiiu (docs/signed-ceiling.md): a name outside
+// it is dropped on its own and logged, never the whole profile. A dropped or missing id keeps its
+// compiled-in value rather than emptying.
+void Apply(const rapidjson::Document& doc, const std::vector<std::string>& families)
 {
+	std::vector<std::string> dropped;
+
+	// Cemu addresses service URLs, not names, so redirect.* changes nothing it does; it is still
+	// held to the ceiling so the log shows what a DNS-level client would drop. redirect.never
+	// only keeps names off OpenPak and cannot widen anything.
+	if (doc.HasMember("redirect") && doc["redirect"].IsObject())
+	{
+		for (const char* field : {"suffixes", "exact"})
+		{
+			if (!doc["redirect"].HasMember(field))
+				continue;
+			for (auto const& entry : doc["redirect"][field].GetArray())
+			{
+				if (!entry.IsString() || !OpenPakCeiling::Inside(entry.GetString(), families))
+					dropped.push_back(fmt::format("redirect.{} \"{}\"", field, entry.IsString() ? entry.GetString() : "(non-string)"));
+			}
+		}
+	}
+
 	std::map<std::string, std::string> applied;
 	if (doc.HasMember("services") && doc["services"].IsArray())
 	{
@@ -226,15 +239,44 @@ void Apply(const rapidjson::Document& doc)
 		{
 			if (!entry.IsObject() || !entry.HasMember("id") || !entry["id"].IsString() ||
 				!entry.HasMember("url") || !entry["url"].IsString())
+			{
+				dropped.push_back("a malformed services entry");
 				continue;
-			applied.emplace(entry["id"].GetString(), entry["url"].GetString());
+			}
+			const std::string id = entry["id"].GetString();
+			const std::string url = entry["url"].GetString();
+			std::string scheme, host;
+			if (!SplitURL(url, scheme, host))
+			{
+				dropped.push_back(fmt::format("service {} (unparsable url)", id));
+				continue;
+			}
+			if (!OpenPakCeiling::Inside(host, families))
+			{
+				dropped.push_back(fmt::format("service {} \"{}\"", id, host));
+				continue;
+			}
+			applied.emplace(id, url);
 		}
 	}
+
+	std::string drops;
+	for (const std::string& d : dropped)
+		drops += (drops.empty() ? "" : ", ") + d;
+
 	std::lock_guard lock(g_mutex);
 	g_applied = std::move(applied);
 	g_version = doc.HasMember("version") && doc["version"].IsInt() ? doc["version"].GetInt() : -1;
+	if (drops != g_lastDrops)
+	{
+		g_lastDrops = drops;
+		if (!drops.empty())
+			cemuLog_log(LogType::Force, "network profile: dropped outside the ceiling ({}): {}", OpenPakCeiling::Source(), drops);
+	}
 }
 
+// The shape of the profile. Names are not judged here: Apply drops the ones outside the ceiling
+// one by one.
 std::string Validate(const rapidjson::Document& doc)
 {
 	if (!doc.IsObject())
@@ -257,55 +299,90 @@ std::string Validate(const rapidjson::Document& doc)
 			return "server.https_port is out of range";
 	}
 
+	if (doc.HasMember("redirect") && !doc["redirect"].IsObject())
+		return "redirect is not an object";
 	for (const char* field : {"suffixes", "exact", "never"})
 	{
-		if (!doc.HasMember("redirect") || !doc["redirect"].IsObject() ||
-			!doc["redirect"].HasMember(field))
+		if (!doc.HasMember("redirect") || !doc["redirect"].HasMember(field))
 			continue;
-		auto const& list = doc["redirect"][field];
-		if (!list.IsArray())
+		if (!doc["redirect"][field].IsArray())
 			return fmt::format("redirect.{} is not an array", field);
-		for (auto const& entry : list.GetArray())
-		{
-			if (!entry.IsString() || !NameAllowed(entry.GetString()))
-				return fmt::format("redirect.{} names \"{}\", outside the families Cemu addresses",
-					field, entry.IsString() ? entry.GetString() : "(non-string)");
-		}
 	}
-
-	if (doc.HasMember("services") && doc["services"].IsArray())
-	{
-		for (auto const& entry : doc["services"].GetArray())
-		{
-			if (!entry.IsObject() || !entry.HasMember("id") || !entry["id"].IsString() ||
-				!entry.HasMember("url") || !entry["url"].IsString())
-				return "services contains a malformed entry";
-			std::string scheme, host;
-			if (!SplitURL(entry["url"].GetString(), scheme, host))
-				return fmt::format("service {} has an unparsable url", entry["id"].GetString());
-			if (!NameAllowed(host))
-				return fmt::format("service {} points at \"{}\", outside the families Cemu addresses",
-					entry["id"].GetString(), host);
-		}
-	}
+	if (doc.HasMember("services") && !doc["services"].IsArray())
+		return "services is not an array";
 	return {};
 }
 
-} // namespace
-
-namespace OpenPakNetworkProfile
+// sha256 over the sorted effective set: "service:<id>=<url>" for every id Cemu resolves. Only
+// wiiu's services go in, so a change to another platform's list never changes it.
+std::string EffectiveDigest()
 {
-
-void ApplyAtLaunch()
-{
-	Refresh();
+	std::vector<std::string> entries;
+	for (const char* id : kServiceIds)
+		entries.push_back(fmt::format("service:{}={}", id, OpenPakNetworkProfile::ServiceURL(id)));
+	std::sort(entries.begin(), entries.end());
+	std::string joined;
+	for (const std::string& e : entries)
+		joined += e + "\n";
+	unsigned char md[EVP_MAX_MD_SIZE];
+	unsigned int len = 0;
+	if (EVP_Digest(joined.data(), joined.size(), md, &len, EVP_sha256(), nullptr) != 1)
+		return joined; // still a faithful identity of the set
+	std::string hex;
+	for (unsigned int i = 0; i < len; ++i)
+		hex += fmt::format("{:02x}", md[i]);
+	return hex;
 }
 
-void Refresh()
+// Rule 4: the first Refresh sets the digest in use; a later one that lands on a digest not seen
+// before raises the notice once.
+void CheckForChange()
 {
+	const std::string digest = EffectiveDigest();
+	std::function<void()> notify;
+	{
+		std::lock_guard lock(g_mutex);
+		if (!g_haveDigest)
+		{
+			g_haveDigest = true;
+			g_digestInUse = digest;
+			g_notified.insert(digest);
+		}
+		else if (digest != g_digestInUse)
+		{
+			g_digestInUse = digest;
+			if (g_notified.insert(digest).second)
+				notify = g_onChange;
+		}
+	}
+	if (notify)
+	{
+		cemuLog_log(LogType::Force, "network profile: the effective wiiu redirects changed");
+		notify();
+	}
+}
+
+// Everything Refresh does after the two fetches; the caller runs CheckForChange afterwards.
+void RefreshLocked()
+{
+	// The signed ceiling from its pinned origin, alongside the profile, so a launch waits for one
+	// two-second timeout at most.
+	std::future<void> ceiling;
+	try
+	{
+		ceiling = std::async(std::launch::async, OpenPakCeiling::Update);
+	}
+	catch (const std::exception&)
+	{
+		OpenPakCeiling::Update();
+	}
+
 	const std::string etag_sent = ReadFile(EtagPath());
 	std::string body, etag;
 	const long status = FetchOnce(etag_sent, body, etag);
+	if (ceiling.valid())
+		ceiling.wait();
+	const std::vector<std::string> families = OpenPakCeiling::Families();
 
 	if (status == 304)
 	{
@@ -314,7 +391,7 @@ void Refresh()
 		doc.Parse(stored.c_str());
 		if (!stored.empty() && !doc.HasParseError() && Validate(doc).empty())
 		{
-			Apply(doc);
+			Apply(doc, families);
 			std::lock_guard lock(g_mutex);
 			g_source = "cached";
 			cemuLog_log(LogType::Force, fmt::format("network profile: cached v{} in use (unchanged at the server)", g_version));
@@ -333,13 +410,14 @@ void Refresh()
 		doc.Parse(stored.c_str());
 		if (!stored.empty() && !doc.HasParseError() && Validate(doc).empty())
 		{
-			Apply(doc);
+			Apply(doc, families);
 			std::lock_guard lock(g_mutex);
 			g_source = "cached";
 			cemuLog_log(LogType::Force, fmt::format("network profile: cached v{} in use (HTTP {})", g_version, status));
 			return;
 		}
 		std::lock_guard lock(g_mutex);
+		g_applied.clear();
 		g_source = "built-in";
 		g_version = -1;
 		cemuLog_log(LogType::Force, fmt::format("network profile: built-in service URLs in use (HTTP {})", status));
@@ -348,23 +426,24 @@ void Refresh()
 
 	rapidjson::Document doc;
 	doc.Parse(body.c_str());
-	const std::string problem = doc.HasParseError() ? fmt::format("not valid JSON ({})", doc.GetParseError())
+	const std::string problem = doc.HasParseError() ? fmt::format("not valid JSON ({})", static_cast<int>(doc.GetParseError()))
 													: Validate(doc);
 	if (!problem.empty())
 	{
-		// Rejected whole, never partially applied.
+		// A profile of the wrong shape is rejected whole; names outside the ceiling never are.
 		const std::string stored = ReadFile(ProfilePath());
 		rapidjson::Document previous;
 		previous.Parse(stored.c_str());
 		if (!stored.empty() && !previous.HasParseError() && Validate(previous).empty())
 		{
-			Apply(previous);
+			Apply(previous, families);
 			std::lock_guard lock(g_mutex);
 			g_source = "cached";
 			cemuLog_log(LogType::Force, fmt::format("network profile: rejected the fetched profile ({}); cached v{} in use", problem, g_version));
 			return;
 		}
 		std::lock_guard lock(g_mutex);
+		g_applied.clear();
 		g_source = "built-in";
 		g_version = -1;
 		cemuLog_log(LogType::Force, fmt::format("network profile: rejected the fetched profile ({}); built-in service URLs in use", problem));
@@ -373,10 +452,36 @@ void Refresh()
 
 	WriteFile(ProfilePath(), body);
 	WriteFile(EtagPath(), etag);
-	Apply(doc);
+	Apply(doc, families);
 	std::lock_guard lock(g_mutex);
 	g_source = "fetched";
-	cemuLog_log(LogType::Force, fmt::format("network profile: fetched v{} for {}", g_version, kPlatform));
+	cemuLog_log(LogType::Force, fmt::format("network profile: fetched v{} for {} (ceiling {})", g_version, kPlatform, OpenPakCeiling::Source()));
+}
+
+} // namespace
+
+namespace OpenPakNetworkProfile
+{
+
+void ApplyAtLaunch()
+{
+	Refresh();
+}
+
+void Refresh()
+{
+	{
+		std::lock_guard refresh(g_refreshMutex);
+		curl_global_init(CURL_GLOBAL_DEFAULT);
+		RefreshLocked();
+	}
+	CheckForChange();
+}
+
+void SetChangeListener(std::function<void()> listener)
+{
+	std::lock_guard lock(g_mutex);
+	g_onChange = std::move(listener);
 }
 
 std::string ServiceURL(std::string_view id)

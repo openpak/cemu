@@ -403,6 +403,7 @@ MainWindow::MainWindow()
 		[this](OpenPakUI::Page page) { OpenOpenPakWindow(page); },
 		[this]() { OpenSettings(true); },
 		[this]() { CallAfter([this]() { RecreateMenu(); }); }});
+	OpenPakUI::StartNetworkWatch();
 	CallAfter([this, quick_launch]() {
 		// A stored sign-in the website refuses becomes a toast, never a prompt (§5.1); the
 		// connect prompt is once per install, and only on a plain interactive launch (§3.2).
