@@ -1,14 +1,18 @@
 # Next session — cemu
 
-Updated 2026-09-23.
+Updated 2026-09-24.
 
 Upstream Cemu (Wii U) plus OpenPak: an **OpenPak** entry in the Network Service picker, the
 launch-time network profile, sign-in that mints and installs the Wii U identity (no console
 dump needed), and the UX-spec surfaces (emulators/prds/openpak-ux-spec.md §8, U1–U7): the
 top-level OpenPak menu, the seven-page OpenPak window, the sign-in dialog, connect prompt and
 sign-out confirmation, General settings → OpenPak, toasts, and the reused OpenPak Mii account.
-Released up to `openpak-v0.3.1`; the UX-spec work is on the `release-prep` branch, waiting for
-the coordinated build and release.
+Latest tag `v0.4.1`; tags moved from `openpak-v*` (last `openpak-v0.3.1`) to `v*.*.*`, and CI
+builds only on those.
+
+Current status 2026-09-24: `release-prep` is merged into `main`; the UX-spec work shipped in
+`v0.4.0` (09-23) and `v0.4.1` (09-24) adds the signed redirect ceiling for the wiiu network
+profile.
 
 ## Where things stand
 
@@ -19,8 +23,8 @@ the coordinated build and release.
 
 ## Next steps
 
-- Build and release the `release-prep` work (`openpak-v0.4.0`), then run it: menu states,
-  sign-in into the reused Mii account, the window's pages against openpak.org.
+- Run `v0.4.1`: menu states, sign-in into the reused Mii account, the window's pages against
+  openpak.org (not recorded as done in git).
 - S-1 Wii U cloud-save sync and M-1 graphic-pack installs: the Cloud saves and Mods pages are
   read-only until they exist; the *Sync cloud saves* setting is stored but unused.
 - *Open Miiverse* on the News page points at `{website}/miiverse`; confirm the real Miiverse
