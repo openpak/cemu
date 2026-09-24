@@ -34,3 +34,12 @@ the coordinated build and release.
 - [`../prds/`](../prds/README.md) — emulator-wide PRDs (`emulators/prds/` in the workspace):
   emulator-integration-prd.md (E3 done here), emulator-network-profile-prd.md.
 - `OPENPAK.md` — this fork's own readme.
+
+## Scratch (research and throwaway work)
+
+Decompiles, Ghidra projects, dumps, exefs/romfs extracts, packet captures,
+strace and emulator logs, probe harnesses: put them in
+`~/REPOS/Openpak/scratch/<topic>`. That folder is a local mount of the media pool,
+outside every repository, so nothing in it is committed. Never use `/tmp` (a
+shared 15 GB RAM disk) or elsewhere on `/home` for this. Keys and signing
+material never go there. Rule: `docs/playbooks/conventions.md` in the workspace.
