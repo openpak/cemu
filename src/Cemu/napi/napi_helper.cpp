@@ -155,9 +155,21 @@ void CurlRequestHelper::initate(NetworkService service, std::string url, SERVER_
 
 	// OpenPak: name the emulator on every request to its account services, so the
 	// NEX token issued here is recorded as Cemu's and friends see "on Cemu" rather
-	// than "on Wii U" for the same PNID.
+	// than "on Wii U" for the same PNID. "cemu/<version> (<os>)"; no suffix on a
+	// platform outside windows/macos/linux (the BSDs).
 	if (service == NetworkService::OpenPak)
-		addHeaderField("X-OpenPak-Client", std::string("cemu/") + BUILD_VERSION_STRING);
+	{
+#if BOOST_OS_WINDOWS
+		constexpr const char* openpakOs = " (windows)";
+#elif BOOST_OS_MACOS
+		constexpr const char* openpakOs = " (macos)";
+#elif BOOST_OS_LINUX
+		constexpr const char* openpakOs = " (linux)";
+#else
+		constexpr const char* openpakOs = "";
+#endif
+		addHeaderField("X-OpenPak-Client", std::string("cemu/") + BUILD_VERSION_STRING + openpakOs);
+	}
 
 	curl_easy_setopt(m_curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(m_curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_DEFAULT);
